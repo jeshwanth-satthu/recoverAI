@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-base: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-surface-elevated: #ffffff;
+    
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(15, 23, 42, 0.08);
+    --glass-border-hover: rgba(99, 102, 241, 0.28);
+    --glass-inner-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+
+    --recovered-neon: #059669;
+    --recovered-glow: rgba(16, 185, 129, 0.2);
+
+    --risk-neon: #e11d48;
+    --risk-glow: rgba(244, 63, 94, 0.2);
+
+    --ai-neon: #7c3aed;
+    --ai-glow: rgba(124, 58, 237, 0.2);
+
+    --cyan-neon: #0284c7;
+    --cyan-glow: rgba(2, 132, 199, 0.2);
+
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    min-height: 100%;
+    background-color: var(--bg-base);
+    color: #0f172a;
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+
+  /* Custom sleek light mode scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(241, 245, 249, 0.8);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.15);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.4);
+  }
+}
+
+/* =========================================================
+   LUXURY WHITE GLASSMORPHISM & HUD UTILITIES
+   ========================================================= */
+
+.font-mono-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 
+    0 10px 25px -5px rgba(15, 23, 42, 0.05),
+    0 8px 10px -6px rgba(15, 23, 42, 0.03),
+    var(--glass-inner-shadow);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.glass-panel:hover {
+  border-color: var(--glass-border-hover);
+}
+
+.glass-panel-interactive {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 
+    0 10px 25px -5px rgba(15, 23, 42, 0.05),
+    var(--glass-inner-shadow);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-interactive:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 
+    0 20px 35px -10px rgba(15, 23, 42, 0.08),
+    0 0 20px -3px rgba(99, 102, 241, 0.15),
+    var(--glass-inner-shadow);
+  transform: translateY(-2px);
+}
+
+/* Recovered vs. Risk Glow Effects */
+.glow-recovered {
+  box-shadow: 0 10px 25px -5px var(--recovered-glow);
+}
+
+.glow-risk {
+  box-shadow: 0 10px 25px -5px var(--risk-glow);
+}
+
+.glow-ai {
+  box-shadow: 0 10px 25px -5px var(--ai-glow);
+}
+
+.glow-cyan {
+  box-shadow: 0 10px 25px -5px var(--cyan-glow);
+}
+
+/* Background grid lattice for white mode */
+.bg-cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Soft pearl vignette to frame the 3D scene */
+.bg-vignette {
+  background: radial-gradient(circle at 50% 35%, transparent 30%, rgba(241, 245, 249, 0.75) 75%, #f8fafc 100%);
+}
+
+/* Pulsing radar dot */
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+.radar-ping {
+  animation: radar-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Animated gradient text */
+.text-gradient-ai {
+  background: linear-gradient(135deg, #6366f1 0%, #0284c7 50%, #4f46e5 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #059669 0%, #10b981 50%, #047857 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-rose {
+  background: linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #be123c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
