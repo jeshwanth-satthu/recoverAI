@@ -72,6 +72,8 @@ razorpay_client: Any = razorpay.Client(
 default_cors_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if cors_origins_env:
@@ -86,11 +88,13 @@ else:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=cors_origins if cors_origins_env else ["*"],
+    allow_credentials=True if cors_origins_env else False,
+    allow_origin_regex=r"https?://.*" if not cors_origins_env else None,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.get("/")

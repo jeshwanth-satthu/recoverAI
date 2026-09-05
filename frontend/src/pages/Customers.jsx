@@ -1,16 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Users, Search, ShieldCheck, AlertCircle, ArrowUpRight, TrendingUp, Cpu } from "lucide-react";
 import { use3DTilt } from "../hooks/use3DTilt";
 import { playClickSound, playHoverSound } from "../lib/soundFX";
-
-const MOCK_CUSTOMERS = [
-    { id: "CUST-9012", name: "Aarav Sharma", plan: "Enterprise", LTV: "₹1,45,000", riskScore: 12, recoveredRevenue: "₹24,500", status: "Healthy", gateway: "Stripe India" },
-    { id: "CUST-8431", name: "Priya Patel", plan: "Pro Tier", LTV: "₹89,000", riskScore: 48, recoveredRevenue: "₹12,200", status: "Attention Needed", gateway: "Razorpay" },
-    { id: "CUST-7219", name: "Vikram Malhotra", plan: "Enterprise", LTV: "₹3,20,000", riskScore: 82, recoveredRevenue: "₹65,000", status: "High Risk", gateway: "PayU" },
-    { id: "CUST-6104", name: "Ananya Iyer", plan: "Growth", LTV: "₹42,000", riskScore: 5, recoveredRevenue: "₹0", status: "Optimal", gateway: "Stripe Global" },
-    { id: "CUST-5590", name: "Rohan Verma", plan: "Enterprise", LTV: "₹2,10,000", riskScore: 28, recoveredRevenue: "₹38,900", status: "Healthy", gateway: "Razorpay" },
-];
+import { getRecoveryCases } from "../services/api";
 
 function Customer3DCard({ customer }) {
     const tiltProps = use3DTilt({ maxTilt: 10, scale: 1.02 });
@@ -67,13 +60,45 @@ function Customer3DCard({ customer }) {
 
 export default function Customers() {
     const [search, setSearch] = useState("");
+    const [customers, setCustomers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchCustomers() {
+            try {
+                const res = await getRecoveryCases();
+                const cases = Array.isArray(res) ? res : res?.cases || res?.data || [];
+                const map = new Map();
+                for (const item of cases) {
+                    const name = item.customer || item.customer_name;
+                    if (!name || map.has(name)) continue;
+                    map.set(name, {
+                        id: item.case_id || item.transaction_id || `CUST-${map.size + 1}`,
+                        name,
+                        plan: item.customer_tier || "Standard",
+                        LTV: item.customer_clv ? `₹${Number(item.customer_clv).toLocaleString("en-IN")}` : `₹${Number(item.amount * 4 || 25000).toLocaleString("en-IN")}`,
+                        riskScore: item.risk_level === "HIGH" ? 78 : 15,
+                        recoveredRevenue: item.status === "recovered" ? `₹${Number(item.amount).toLocaleString("en-IN")}` : "₹0",
+                        status: item.risk_level === "HIGH" ? "High Risk" : "Healthy",
+                        gateway: "Razorpay",
+                    });
+                }
+                setCustomers(Array.from(map.values()));
+            } catch (err) {
+                console.error("Failed to load customers:", err);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchCustomers();
+    }, []);
 
     const filtered = useMemo(() => {
-        return MOCK_CUSTOMERS.filter(c =>
+        return customers.filter(c =>
             c.name.toLowerCase().includes(search.toLowerCase()) ||
             c.id.toLowerCase().includes(search.toLowerCase())
         );
-    }, [search]);
+    }, [customers, search]);
 
     return (
         <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -111,11 +136,21 @@ export default function Customers() {
             </div>
 
             {/* CUSTOMERS GRID */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "20px" }}>
-                {filtered.map(cust => (
-                    <Customer3DCard key={cust.id} customer={cust} />
-                ))}
-            </div>
+            {loading ? (
+                <div style={{ textAlign: "center", padding: "40px", fontFamily: "DM Mono", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Loading live customer profiles...
+                </div>
+            ) : filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", fontFamily: "DM Mono", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    No customer profiles available.
+                </div>
+            ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "20px" }}>
+                    {filtered.map(cust => (
+                        <Customer3DCard key={cust.id} customer={cust} />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

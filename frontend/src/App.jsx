@@ -29,7 +29,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [activeTab, setActiveTab] = useState("dashboard");
   const [metrics, setMetrics] = useState(INITIAL_METRICS);
-  const [cases, setCases] = useState(INITIAL_CASES);
+  const [cases, setCases] = useState([]);
   const [selectedReviewCase, setSelectedReviewCase] = useState(null);
   const [isDbConnected, setIsDbConnected] = useState(true);
   const [globalSearch, setGlobalSearch] = useState("");
@@ -72,13 +72,13 @@ export default function App() {
         }));
       }
 
-      if (
-        casesRes.status === "fulfilled" &&
-        casesRes.value?.cases &&
-        Array.isArray(casesRes.value.cases) &&
-        casesRes.value.cases.length > 0
-      ) {
-        setCases(casesRes.value.cases);
+      if (casesRes.status === "fulfilled" && casesRes.value) {
+        const nextCases = Array.isArray(casesRes.value.cases)
+          ? casesRes.value.cases
+          : Array.isArray(casesRes.value)
+          ? casesRes.value
+          : [];
+        setCases(nextCases);
       }
 
       if (healthRes.status === "fulfilled") {
@@ -166,9 +166,9 @@ export default function App() {
       guardrail: {
         passed: false,
         requires_human_approval: true,
-        reason: "High Value Flag: Transaction amount ₹92,400 exceeds autonomous ceiling (₹50,000).",
+        reason: "High Value Flag: Transaction amount ₹92,400 exceeds autonomous ceiling (₹10,000).",
         triggered_rules: [
-          "Rule 4.1: Single settlement > ₹50,000 requires Senior Finance Review",
+          "Rule 4.1: Single settlement > ₹10,000 requires Senior Finance Review",
           "Rule 1.2: High-velocity enterprise account guardrail active",
         ],
       },

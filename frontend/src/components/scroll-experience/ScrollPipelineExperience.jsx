@@ -73,9 +73,9 @@ const STAGE_DETAILS = [
     icon: ShieldAlert,
     accent: "#f37a0a",
     description:
-      "Deterministic safety policies inspect transaction ceiling, customer lifetime value, and discount limits. If high risk or >₹50,000, autonomous execution instantly freezes for human authorization.",
+      "Deterministic safety policies inspect transaction ceiling, customer lifetime value, and discount limits. If high risk or >₹10,000, autonomous execution instantly freezes for human authorization.",
     metrics: [
-      { label: "AUTONOMOUS CAP", value: "₹50,000" },
+      { label: "AUTONOMOUS CAP", value: "₹10,000" },
       { label: "CIRCUIT BREAKER", value: "SECURE" },
       { label: "AUDIT LEDGER", value: "TAMPER-PROOF" },
     ],
@@ -344,7 +344,7 @@ export default function ScrollPipelineExperience({
                       </h4>
                       <p className="font-mono text-xs text-[#4e4d4d] mt-1 max-w-xl">
                         {activeCase?.guardrail?.reason ||
-                          "High-Value Settlement: Amount exceeds autonomous ceiling (₹50,000). Autonomous execution halted."}
+                          "High-Value Settlement: Amount exceeds autonomous ceiling (₹10,000). Autonomous execution halted."}
                       </p>
                     </div>
                   </div>

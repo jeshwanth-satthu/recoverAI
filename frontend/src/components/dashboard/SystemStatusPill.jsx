@@ -4,7 +4,7 @@ import GlassCard from "../ui/GlassCard";
 export default function SystemStatusPill({ isDbConnected = true }) {
   const systems = [
     { label: "RECOVERY ENGINE", status: "ONLINE", isGreen: true },
-    { label: "GEMINI 1.5 PRO", status: "ONLINE", isGreen: true },
+    { label: "GEMINI ENGINE", status: "ONLINE", isGreen: true },
     { label: "RAZORPAY GATEWAY", status: "ONLINE", isGreen: true },
     {
       label: "MONGODB CLUSTER",
