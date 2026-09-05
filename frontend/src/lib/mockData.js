@@ -4,16 +4,16 @@
  */
 
 export const INITIAL_METRICS = {
-  revenue_at_risk: 648500,
-  revenue_recovered: 2840200,
-  recovery_rate: 78.6,
-  successful_recoveries: 412,
-  total_transactions: 524,
-  audit_events: 1842,
+  revenue_at_risk: 0,
+  revenue_recovered: 0,
+  recovery_rate: 0,
+  successful_recoveries: 0,
+  total_transactions: 0,
+  audit_events: 0,
   average_recovery_time_sec: 4.2,
   autonomous_percentage: 86.4,
   active_ai_agents: 6,
-  pipeline_health: 99.8,
+  pipeline_health: 100,
 };
 
 export const REVENUE_TIMELINE = [

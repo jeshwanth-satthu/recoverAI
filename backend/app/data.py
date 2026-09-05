@@ -42,7 +42,7 @@ transactions = [
         "id": "pay_1004",
         "customer": "Sneha Patel",
         "email": "sneha@example.com",
-        "amount": 14999,
+        "amount": 19999,
         "currency": "INR",
         "type": "subscription",
         "status": "failed",
@@ -58,11 +58,11 @@ transactions = [
         "amount": 1999,
         "currency": "INR",
         "type": "checkout",
-        "status": "success",
-        "failure_reason": None,
+        "status": "failed",
+        "failure_reason": "insufficient_funds",
         "retry_count": 0,
-        "risk_level": "none",
-        "recoverable": False
+        "risk_level": "medium",
+        "recoverable": True
     },
     {
         "id": "pay_1006",

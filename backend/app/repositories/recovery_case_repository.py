@@ -24,6 +24,7 @@ def create_recovery_case(transaction, customer_profile=None):
         "guardrail": None,
         "execution": None,
         "verification": None,
+        "ml_strategy": None,
         "amount_recovered": 0,
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat()

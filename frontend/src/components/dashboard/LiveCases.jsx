@@ -5,19 +5,22 @@ import {
   CheckCircle2,
   Zap,
   Search,
-  Sparkles,
+  Brain,
+  ArrowRight,
+  CreditCard,
 } from "lucide-react";
 
 import GlassCard from "../ui/GlassCard";
-import Badge from "../ui/Badge";
-import Button from "../ui/Button";
 import { playClickSound } from "../../lib/soundFX";
 
 export default function LiveCases({
   cases = [],
   onSelectCase,
+  onSelectJourneyCase,
   onTriggerRecovery,
+  onRazorpayPayment,
   recoveringId = null,
+  razorpayLoadingId = null,
   maxItems,
   onViewAll,
   searchQuery = "",
@@ -30,11 +33,9 @@ export default function LiveCases({
 
     for (const item of cases) {
       const key = item?.transaction_id || item?.case_id;
-
       if (!key) continue;
 
       const existing = grouped.get(key);
-
       if (!existing) {
         grouped.set(key, item);
         continue;
@@ -48,7 +49,6 @@ export default function LiveCases({
         item?.status === "recovered" ||
         item?.verification?.recovered === true;
 
-      // Recovered is always the authoritative display state.
       if (currentRecovered && !existingRecovered) {
         grouped.set(key, item);
         continue;
@@ -58,14 +58,8 @@ export default function LiveCases({
         continue;
       }
 
-      // Otherwise prefer the newest case.
-      const existingTime = new Date(
-        existing?.created_at || 0
-      ).getTime();
-
-      const currentTime = new Date(
-        item?.created_at || 0
-      ).getTime();
+      const existingTime = new Date(existing?.created_at || 0).getTime();
+      const currentTime = new Date(item?.created_at || 0).getTime();
 
       if (currentTime > existingTime) {
         grouped.set(key, item);
@@ -83,10 +77,8 @@ export default function LiveCases({
 
       const isHuman =
         !isRecovered &&
-        (
-          item?.status === "human_approval" ||
-          item?.guardrail?.requires_human_approval === true
-        );
+        (item?.status === "human_approval" ||
+          item?.guardrail?.requires_human_approval === true);
 
       if (filter === "human_approval" && !isHuman) return false;
       if (filter === "recovered" && !isRecovered) return false;
@@ -120,40 +112,30 @@ export default function LiveCases({
   const pendingApprovalCount = useMemo(() => {
     return uniqueCases.filter((c) => {
       const recovered =
-        c?.status === "recovered" ||
-        c?.verification?.recovered === true;
-
+        c?.status === "recovered" || c?.verification?.recovered === true;
       return (
         !recovered &&
-        (
-          c?.status === "human_approval" ||
-          c?.guardrail?.requires_human_approval === true
-        )
+        (c?.status === "human_approval" ||
+          c?.guardrail?.requires_human_approval === true)
       );
     }).length;
   }, [uniqueCases]);
 
   return (
-    <div className="space-y-5">
+    <div id="cases-section" className="space-y-6">
       {/* ===================================================
           1. HEADER & FILTER CONTROLS
           =================================================== */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-4 pb-4 border-b border-[#cecac8]">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-display text-xl font-bold text-slate-900 tracking-wide">
-              {maxItems ? "Priority Recovery Queue" : "Live Recovery Stream"}
-            </h3>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-              {maxItems && filteredCases.length > maxItems
-                ? `${visibleCases.length} of ${filteredCases.length}`
-                : `${filteredCases.length}`} Transactions
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 font-mono">
-            {maxItems
-              ? "Most recent unique transactions needing attention"
-              : "Autonomous ingestion pipeline with deterministic safety guardrail intercepts"}
+          <span className="font-mono text-xs uppercase tracking-wider text-[#797776]">
+            INGESTION LEDGER / CASE AUDIT
+          </span>
+          <h3 className="font-serif text-2xl md:text-3xl font-normal text-[#242424] mt-1">
+            Active Recovery Cases
+          </h3>
+          <p className="font-mono text-xs text-[#797776] mt-0.5">
+            {filteredCases.length} transactions in telemetry index
           </p>
         </div>
 
@@ -162,68 +144,72 @@ export default function LiveCases({
           {onViewAll && (
             <button
               onClick={onViewAll}
-              className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono font-semibold text-violet-700 hover:bg-violet-50 hover:border-violet-200 transition-colors"
+              className="px-4 py-1.5 rounded-full border border-[#cecac8] bg-[#f6f3f1] hover:border-[#242424] text-xs font-mono text-[#242424] uppercase tracking-wider transition-colors cursor-pointer"
             >
-              View full queue
+              VIEW FULL QUEUE
             </button>
           )}
+
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[#797776] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by customer or ID..."
-              className="w-48 sm:w-56 pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-500 shadow-xs"
+              placeholder="Search customer or ID..."
+              className="w-48 sm:w-56 pl-9 pr-4 py-1.5 rounded-full border border-[#cecac8] bg-[#f6f3f1] text-xs font-mono text-[#242424] placeholder-[#797776] focus:outline-none focus:border-[#242424]"
             />
           </div>
 
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono">
+          <div className="flex items-center gap-1 p-1 rounded-full border border-[#cecac8] bg-[#f6f3f1] text-xs font-mono">
             <button
+              type="button"
               onClick={() => {
                 playClickSound();
                 setFilter("all");
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
                 filter === "all"
-                  ? "bg-white text-violet-700 font-bold shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-[#242424] text-[#f6f3f1]"
+                  : "text-[#797776] hover:text-[#242424]"
               }`}
             >
-              All Cases
+              ALL
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 playClickSound();
                 setFilter("human_approval");
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
                 filter === "human_approval"
-                  ? "bg-rose-600 text-white font-bold shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-[#242424] text-[#f6f3f1]"
+                  : "text-[#797776] hover:text-[#242424]"
               }`}
             >
-              <span>High Risk</span>
+              <span>HIGH RISK</span>
               {pendingApprovalCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-rose-200 text-rose-800 text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 rounded-full bg-[#f37a0a] text-white text-[10px]">
                   {pendingApprovalCount}
                 </span>
               )}
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 playClickSound();
                 setFilter("recovered");
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
                 filter === "recovered"
-                  ? "bg-emerald-600 text-white font-bold shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-[#242424] text-[#f6f3f1]"
+                  : "text-[#797776] hover:text-[#242424]"
               }`}
             >
-              Recovered
+              RECOVERED
             </button>
           </div>
         </div>
@@ -232,7 +218,7 @@ export default function LiveCases({
       {/* ===================================================
           2. CASE STREAM LIST
           =================================================== */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <AnimatePresence mode="popLayout">
           {visibleCases.map((item) => {
             const isRecovered =
@@ -241,112 +227,90 @@ export default function LiveCases({
 
             const isHuman =
               !isRecovered &&
-              (
-                item?.status === "human_approval" ||
-                item?.guardrail?.requires_human_approval === true
-              );
+              (item?.status === "human_approval" ||
+                item?.guardrail?.requires_human_approval === true);
             const amount = Number(item?.amount || 0);
 
             return (
               <motion.div
                 key={item.case_id || item.transaction_id}
                 layout
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.2 }}
               >
-                <GlassCard
-                  variant={isHuman ? "risk" : isRecovered ? "recovered" : "default"}
-                  className="p-4 bg-white/95 border-slate-200/80 hover:border-slate-300 transition-all shadow-xs"
-                >
+                <GlassCard className="p-6 hover:border-[#4e4d4d] transition-all">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     {/* LEFT SECTION: CUSTOMER & CASE INTEL */}
                     <div className="space-y-2 flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="font-mono text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                          {item.case_id || "CASE-LIVE"}
-                        </span>
-                        <span className="font-mono text-xs text-slate-500">
-                          {item.transaction_id}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
+                        <button
+                          type="button"
+                          onClick={() => onSelectJourneyCase?.(item)}
+                          title="Inspect 7-Stage Autonomous Journey"
+                          className="px-2.5 py-0.5 rounded-full border border-[#cecac8] bg-white text-[#242424] hover:border-[#242424] transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>{item.case_id || item.transaction_id || "CASE-LIVE"}</span>
+                          <span className="text-[10px] text-[#2b59d1] font-semibold">JOURNEY ↗</span>
+                        </button>
 
                         {isHuman ? (
-                          <Badge
-                            label="Requires Human Review"
-                            variant="risk"
-                            pulsing={true}
-                            size="sm"
-                          />
+                          <span className="px-2.5 py-0.5 rounded-full border border-[#f37a0a] text-[#f37a0a] uppercase tracking-wider text-[11px]">
+                            REQUIRES HUMAN APPROVAL
+                          </span>
                         ) : isRecovered ? (
-                          <Badge
-                            label="Auto-Recovered"
-                            variant="recovered"
-                            size="sm"
-                          />
+                          <span className="px-2.5 py-0.5 rounded-full border border-[#059669] text-[#059669] uppercase tracking-wider text-[11px]">
+                            AUTO-RECOVERED ✓
+                          </span>
                         ) : (
-                          <Badge
-                            label="In Pipeline"
-                            variant="ai"
-                            pulsing={true}
-                            size="sm"
-                          />
+                          <span className="px-2.5 py-0.5 rounded-full border border-[#2b59d1] text-[#2b59d1] uppercase tracking-wider text-[11px]">
+                            IN PIPELINE
+                          </span>
                         )}
 
-                        <span className="text-[11px] font-mono text-slate-400">
-                          {item.created_at || "Just now"}
+                        <span className="text-[#797776]">
+                          {item.created_at || "Recent"}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-violet-100 border border-violet-200 flex items-center justify-center text-[10px] font-mono font-bold text-violet-700">
-                            {(item.customer || "U")[0]}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-slate-900 text-sm block">
-                              {item.customer || "Customer"}
-                            </span>
-                          </div>
-                        </div>
+                      <div className="flex flex-wrap items-baseline gap-4">
+                        <span className="font-serif text-xl font-normal text-[#242424]">
+                          {item.customer || "Enterprise Account"}
+                        </span>
 
-                        {item.customer_tier && (
-                          <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                            {item.customer_tier}
+                        <span className="font-mono text-xs text-[#797776]">
+                          FAILURE:{" "}
+                          <span className="text-[#242424] uppercase">
+                            {String(item.failure_reason || "GATEWAY_TIMEOUT").replaceAll("_", " ")}
                           </span>
-                        )}
-
-                        <div className="text-xs font-mono text-slate-500">
-                          Failure Vector:{" "}
-                          <span className="text-amber-700 uppercase font-bold">
-                            {String(item.failure_reason || "unknown").replace("_", " ")}
-                          </span>
-                        </div>
+                        </span>
                       </div>
 
-                      {/* GEMINI DIAGNOSIS SNIPPET */}
+                      {/* GEMINI DIAGNOSIS */}
                       {item.diagnosis && (
-                        <div className="flex items-start gap-2 text-xs bg-slate-50 p-2 rounded-xl border border-slate-200 text-slate-700 font-sans">
-                          <Sparkles size={14} className="text-violet-600 shrink-0 mt-0.5" />
-                          <p className="line-clamp-1">
-                            <strong className="text-violet-700 font-mono text-[11px] mr-1.5">
-                              Gemini Diagnosis:
-                            </strong>
-                            {item.diagnosis.diagnosis}
-                          </p>
-                        </div>
+                        <p className="font-mono text-xs text-[#4e4d4d] line-clamp-1">
+                          <strong className="text-[#242424] mr-1.5">
+                            GEMINI DIAGNOSIS:
+                          </strong>
+                          {item.diagnosis.diagnosis}
+                        </p>
                       )}
                     </div>
 
                     {/* RIGHT SECTION: VALUE & ACTION TRIGGER */}
-                    <div className="flex items-center justify-between lg:justify-end gap-5 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                      <div className="text-left lg:text-right font-mono-nums">
-                        <span className="text-[10px] text-slate-400 block uppercase font-mono font-medium">
-                          {isRecovered ? "Salvaged Amount" : "Revenue At Risk"}
+                    <div className="flex items-center justify-between lg:justify-end gap-4 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-[#cecac8]">
+                      <div className="text-left lg:text-right font-mono">
+                        <span className="text-[10px] text-[#797776] block uppercase tracking-wider">
+                          {isRecovered ? "SETTLED AMOUNT" : "REVENUE AT RISK"}
                         </span>
                         <span
-                          className={`text-xl sm:text-2xl font-extrabold ${
-                            isRecovered ? "text-emerald-700" : isHuman ? "text-rose-600" : "text-slate-900"
+                          className={`font-serif text-2xl font-normal ${
+                            isRecovered
+                              ? "text-[#059669]"
+                              : isHuman
+                              ? "text-[#f37a0a]"
+                              : "text-[#242424]"
                           }`}
                         >
                           ₹{amount.toLocaleString("en-IN")}
@@ -355,29 +319,68 @@ export default function LiveCases({
 
                       {/* ACTION BUTTON */}
                       {isHuman ? (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          icon={ShieldAlert}
+                        <button
+                          type="button"
                           onClick={() => onSelectCase(item)}
+                          className="px-6 py-2 rounded-full border border-[#242424] bg-[#242424] hover:bg-[#4e4d4d] text-[#f6f3f1] font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
                         >
-                          Review Case
-                        </Button>
+                          REVIEW CASE →
+                        </button>
                       ) : isRecovered ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-mono font-semibold">
-                          <CheckCircle2 size={14} />
-                          <span>Protected</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[#cecac8] bg-white text-[#059669] text-xs font-mono uppercase tracking-wider">
+                            <CheckCircle2 size={13} />
+                            <span>PROTECTED</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onSelectJourneyCase?.(item)}
+                            className="p-1.5 rounded-full border border-[#cecac8] hover:border-[#242424] text-[#797776] hover:text-[#242424] transition-colors cursor-pointer text-[10px]"
+                            title="View Audit Ledger"
+                          >
+                            ↗
+                          </button>
+                        </div>
+                      ) : item.status === "pending" ||
+                        item.status === "action_dispatched" ||
+                        item.execution?.status === "success" ? (
+                        <div className="flex items-center gap-2">
+                          {onRazorpayPayment && (
+                            <button
+                              type="button"
+                              disabled={razorpayLoadingId === item.transaction_id}
+                              onClick={() => onRazorpayPayment(item.transaction_id)}
+                              className="px-5 py-2 rounded-full border border-[#2b59d1] bg-[#2b59d1] text-white hover:opacity-90 font-mono text-xs uppercase tracking-wider transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                              <CreditCard size={13} />
+                              <span>
+                                {razorpayLoadingId === item.transaction_id
+                                  ? "CHECKOUT..."
+                                  : "TEST CHECKOUT →"}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={recoveringId === item.transaction_id}
+                            onClick={() => onTriggerRecovery(item.transaction_id)}
+                            className="px-3 py-2 rounded-full border border-[#cecac8] bg-white text-[#4e4d4d] hover:border-[#242424] font-mono text-[11px] uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                            title="Re-run Autonomous Agents"
+                          >
+                            RE-RUN
+                          </button>
                         </div>
                       ) : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          icon={Zap}
-                          loading={recoveringId === item.transaction_id}
+                        <button
+                          type="button"
+                          disabled={recoveringId === item.transaction_id}
                           onClick={() => onTriggerRecovery(item.transaction_id)}
+                          className="px-6 py-2 rounded-full border border-[#2b59d1] bg-[#2b59d1] text-white hover:opacity-90 font-mono text-xs uppercase tracking-wider transition-opacity cursor-pointer disabled:opacity-50"
                         >
-                          Trigger AI
-                        </Button>
+                          {recoveringId === item.transaction_id
+                            ? "PROCESSING..."
+                            : "TRIGGER AI →"}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -388,14 +391,10 @@ export default function LiveCases({
         </AnimatePresence>
 
         {filteredCases.length === 0 && (
-          <GlassCard className="text-center py-12 bg-white border-slate-200">
-            <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-3 opacity-80" />
-            <h4 className="font-display font-semibold text-slate-800 text-base">
-              No Cases Match Criteria
-            </h4>
-            <p className="text-xs text-slate-500 font-mono mt-1">
-              All payment failures in this view are resolved or safe.
-            </p>
+          <GlassCard className="text-center py-16">
+            <span className="font-mono text-xs text-[#797776] uppercase tracking-wider">
+              No transactions match the selected filter criteria.
+            </span>
           </GlassCard>
         )}
       </div>

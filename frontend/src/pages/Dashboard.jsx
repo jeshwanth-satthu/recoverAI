@@ -1,21 +1,28 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Sparkles,
-  Zap,
-  ShieldAlert,
-  RotateCcw,
-  CheckCircle2,
-  RefreshCw,
   CreditCard,
+  RefreshCw,
+  CheckCircle2,
+  ArrowRight,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 
+import Hero from "../components/dashboard/Hero";
 import RevenueTracker from "../components/dashboard/RevenueTracker";
+import ScrollPipelineExperience from "../components/scroll-experience/ScrollPipelineExperience";
+import SystemStatusPill from "../components/dashboard/SystemStatusPill";
+import CaseJourneyModal from "../components/dashboard/CaseJourneyModal";
+import RecoveryPipelineDiagram from "../components/dashboard/RecoveryPipelineDiagram";
+import RecoveryQueue from "../components/dashboard/RecoveryQueue";
+import CircuitBreakerStatus from "../components/dashboard/CircuitBreakerStatus";
+import MLIntelligence from "../components/dashboard/MLIntelligence";
+import RecoveryEventStream from "../components/dashboard/RecoveryEventStream";
+import RecoveryFeedback from "../components/dashboard/RecoveryFeedback";
 import LiveCases from "../components/dashboard/LiveCases";
 import HighRiskReviewPanel from "../components/dashboard/HighRiskReviewPanel";
 import GlassCard from "../components/ui/GlassCard";
-import Badge from "../components/ui/Badge";
-import Button from "../components/ui/Button";
 
 import {
   getDashboard,
@@ -23,6 +30,8 @@ import {
   recoverTransaction,
   approveRecovery,
   createRazorpayOrder,
+  verifyRazorpayPayment,
+  resetDemoData,
 } from "../services/api";
 
 import { playSuccessSound, playClickSound } from "../lib/soundFX";
@@ -43,18 +52,25 @@ export default function Dashboard({
   const [isApproving, setIsApproving] = useState(false);
   const [razorpayLoadingId, setRazorpayLoadingId] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [selectedJourneyCase, setSelectedJourneyCase] = useState(null);
+  const [pulseRecovery, setPulseRecovery] = useState(false);
+
+  const triggerRecoveryPulse = () => {
+    setPulseRecovery(true);
+    setTimeout(() => {
+      setPulseRecovery(false);
+    }, 3200);
+  };
 
   const showToast = (msg) => {
     setToastMessage(msg);
-
     setTimeout(() => {
       setToastMessage(null);
     }, 4000);
   };
 
-
   // ============================================================
-  // LIVE BACKEND SYNC
+  // LIVE BACKEND SYNC (Every 3s)
   // ============================================================
 
   const refreshLiveData = async () => {
@@ -78,8 +94,8 @@ export default function Dashboard({
       const nextCases = Array.isArray(casesResponse)
         ? casesResponse
         : casesResponse?.cases ??
-        casesResponse?.data ??
-        [];
+          casesResponse?.data ??
+          [];
 
       if (nextMetrics && typeof nextMetrics === "object") {
         setMetrics((prev) => ({
@@ -96,20 +112,14 @@ export default function Dashboard({
     }
   };
 
-  // Keep the dashboard synchronized with MongoDB/backend state.
-  // This lets Razorpay webhook updates appear without a browser refresh.
   useEffect(() => {
     refreshLiveData();
-
-    const intervalId = window.setInterval(() => {
-      refreshLiveData();
-    }, 3000);
-
+    const intervalId = window.setInterval(refreshLiveData, 3000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   // ============================================================
-  // AUTONOMOUS RECOVERY
+  // AUTONOMOUS RECOVERY DISPATCH
   // ============================================================
 
   const handleTriggerRecovery = async (txnId) => {
@@ -121,15 +131,14 @@ export default function Dashboard({
         prev.map((c) =>
           c.transaction_id === txnId
             ? {
-              ...c,
-              status: "recovering",
-              pipeline_stage: "processing",
-            }
+                ...c,
+                status: "recovering",
+                pipeline_stage: "processing",
+              }
             : c
         )
       );
 
-      // Backend is the source of truth.
       const result = await recoverTransaction(txnId);
 
       if (!result?.success) {
@@ -165,42 +174,27 @@ export default function Dashboard({
   };
 
   // ============================================================
-  // RAZORPAY PAYMENT
+  // RAZORPAY LIVE PAYMENT TEST
   // ============================================================
 
-  const handleRazorpayPayment = async (txnId) => {
-    if (razorpayLoadingId) {
-      return;
-    }
+  const handleRazorpayPayment = async (txnId = "pay_1005") => {
+    if (razorpayLoadingId) return;
 
     setRazorpayLoadingId(txnId);
     playClickSound();
 
     try {
-      // --------------------------------------------------------
-      // Create Razorpay order from backend
-      // --------------------------------------------------------
-
-      const response =
-        await createRazorpayOrder(txnId);
+      const response = await createRazorpayOrder(txnId);
 
       if (!response?.success) {
-        throw new Error(
-          "Unable to create Razorpay order."
-        );
+        throw new Error("Unable to create Razorpay order.");
       }
 
       const order = response.order;
 
       if (!order?.id) {
-        throw new Error(
-          "Razorpay did not return an order ID."
-        );
+        throw new Error("Razorpay did not return an order ID.");
       }
-
-      // --------------------------------------------------------
-      // Make sure Razorpay Checkout is loaded
-      // --------------------------------------------------------
 
       if (!window.Razorpay) {
         throw new Error(
@@ -208,205 +202,98 @@ export default function Dashboard({
         );
       }
 
-      // --------------------------------------------------------
-      // Find matching RecoverAI case
-      // --------------------------------------------------------
-
       const transaction = cases.find(
-        (c) =>
-          c.transaction_id === txnId ||
-          c.id === txnId
+        (c) => c.transaction_id === txnId || c.id === txnId
       );
 
-      // --------------------------------------------------------
-      // Customer information
-      // --------------------------------------------------------
-
       const customerName =
-        transaction?.customer ||
-        transaction?.customer_name ||
-        "";
-
+        transaction?.customer || transaction?.customer_name || "Priya Reddy";
       const customerEmail =
-        transaction?.email ||
-        transaction?.customer_email ||
-        "";
-
-      // --------------------------------------------------------
-      // Razorpay Checkout configuration
-      // --------------------------------------------------------
+        transaction?.email || transaction?.customer_email || "priya@example.com";
 
       const options = {
         key: response.razorpay_key_id,
-
         amount: order.amount,
-
-        currency:
-          order.currency || "INR",
-
+        currency: order.currency || "INR",
         name: "RecoverAI",
-
-        description:
-          "RecoverAI Revenue Recovery Payment",
-
+        description: "RecoverAI Revenue Recovery Payment",
         order_id: order.id,
-
         prefill: {
-          name: customerName || "Priya Reddy",
-          email: customerEmail || "priya@example.com",
-
+          name: customerName,
+          email: customerEmail,
           contact: (() => {
             const phone = String(
-              transaction?.phone ||
-              transaction?.mobile ||
-              "9000090000"
+              transaction?.phone || transaction?.mobile || "9000090000"
             ).trim();
-
             const digits = phone.replace(/\D/g, "");
-
-            return digits.startsWith("91")
-              ? `+${digits}`
-              : `+91${digits}`;
+            return digits.startsWith("91") ? `+${digits}` : `+91${digits}`;
           })(),
         },
-
         notes: {
           recoverai_transaction_id: txnId,
         },
-
         theme: {
-          color: "#00ff9d",
+          color: "#2b59d1",
         },
-
-        handler: function (
-          paymentResponse
-        ) {
-          console.log(
-            "Razorpay payment successful:",
-            paymentResponse
-          );
-
-          showToast(
-            "Payment received. RecoverAI is verifying the transaction."
-          );
-
-          /*
-           * IMPORTANT:
-           *
-           * Do not mark the transaction as recovered
-           * from the browser.
-           *
-           * Razorpay webhook is the source of truth.
-           *
-           * The backend will receive:
-           *
-           * payment.captured
-           * order.paid
-           *
-           * and update MongoDB.
-           */
-
-          setTimeout(() => {
+        handler: async function (paymentResponse) {
+          console.log("Razorpay payment captured:", paymentResponse);
+          showToast("Verifying payment with Razorpay cryptographic signature...");
+          try {
+            const verifyRes = await verifyRazorpayPayment({
+              transaction_id: txnId,
+              razorpay_payment_id: paymentResponse.razorpay_payment_id,
+              razorpay_order_id: paymentResponse.razorpay_order_id,
+              razorpay_signature: paymentResponse.razorpay_signature,
+            });
+            playSuccessSound();
+            triggerRecoveryPulse();
             showToast(
-              "Razorpay payment completed successfully."
+              `Payment verified by Razorpay! ₹${(
+                verifyRes?.amount_recovered || order.amount / 100
+              ).toLocaleString("en-IN")} marked RECOVERED.`
             );
-            refreshLiveData();
-          }, 1500);
-
-          window.setTimeout(refreshLiveData, 3500);
-          window.setTimeout(refreshLiveData, 6000);
+            await refreshLiveData();
+          } catch (verifyErr) {
+            console.error("Razorpay verification failed:", verifyErr);
+            showToast("Verification failed: " + (verifyErr.message || "Cryptographic check failed"));
+            await refreshLiveData();
+          }
         },
-
         modal: {
           ondismiss: function () {
-            console.log(
-              "Razorpay Checkout closed."
-            );
-
             setRazorpayLoadingId(null);
           },
         },
       };
 
-      // --------------------------------------------------------
-      // Create Razorpay instance
-      // --------------------------------------------------------
+      const razorpay = new window.Razorpay(options);
 
-      const razorpay =
-        new window.Razorpay(
-          options
-        );
-
-      // --------------------------------------------------------
-      // Listen for payment failure
-      // --------------------------------------------------------
-
-      razorpay.on(
-        "payment.failed",
-        function (response) {
-          console.log(
-            "Razorpay payment failed:",
-            response?.error
-          );
-
-          showToast(
-            "Payment failed. RecoverAI is initiating recovery."
-          );
-
-          refreshLiveData();
-          window.setTimeout(refreshLiveData, 1500);
-          window.setTimeout(refreshLiveData, 3500);
-          window.setTimeout(refreshLiveData, 6000);
-
-          /*
-           * Do NOT directly call recoverTransaction()
-           * here.
-           *
-           * Razorpay will send payment.failed to:
-           *
-           * /api/webhooks/razorpay
-           *
-           * The backend webhook will trigger
-           * RecoverAI's actual recovery pipeline.
-           */
-        }
-      );
-
-      // --------------------------------------------------------
-      // Open Checkout
-      // --------------------------------------------------------
+      razorpay.on("payment.failed", function (failResponse) {
+        console.log("Razorpay payment failed:", failResponse?.error);
+        showToast("Payment failed. RecoverAI webhook initiating autonomous pipeline.");
+        refreshLiveData();
+        window.setTimeout(refreshLiveData, 1500);
+        window.setTimeout(refreshLiveData, 3500);
+        window.setTimeout(refreshLiveData, 6000);
+      });
 
       razorpay.open();
-
       setRazorpayLoadingId(null);
     } catch (error) {
-      console.error(
-        "Razorpay payment error:",
-        error
-      );
-
+      console.error("Razorpay payment error:", error);
       setRazorpayLoadingId(null);
-
-      showToast(
-        error?.message ||
-        "Unable to open Razorpay Checkout."
-      );
+      showToast(error?.message || "Unable to open Razorpay Checkout.");
     }
   };
 
   // ============================================================
-  // HUMAN APPROVAL
+  // HUMAN APPROVAL & REJECTION
   // ============================================================
 
-  const handleApproveCase = async (
-    txnOrCaseId,
-    notes
-  ) => {
+  const handleApproveCase = async (txnOrCaseId, notes) => {
     setIsApproving(true);
-
     try {
       const result = await approveRecovery(txnOrCaseId);
-
       if (!result?.success) {
         throw new Error(result?.error || "Approval request failed.");
       }
@@ -433,9 +320,7 @@ export default function Dashboard({
           )} cleared.`
         );
       } else {
-        showToast(
-          `Case ${txnOrCaseId} was processed but is not marked recovered.`
-        );
+        showToast(`Case ${txnOrCaseId} processed.`);
       }
 
       setSelectedReviewCase(null);
@@ -448,262 +333,220 @@ export default function Dashboard({
     }
   };
 
-  // ============================================================
-  // HUMAN REJECTION
-  // ============================================================
-
-  const handleRejectCase = (
-    txnOrCaseId
-  ) => {
+  const handleRejectCase = (txnOrCaseId) => {
     setCases((prev) =>
       prev.map((c) => {
-        if (
-          c.transaction_id ===
-          txnOrCaseId ||
-          c.case_id === txnOrCaseId
-        ) {
+        if (c.transaction_id === txnOrCaseId || c.case_id === txnOrCaseId) {
           return {
             ...c,
-
             status: "failed",
-
             guardrail: {
               ...c.guardrail,
-
-              reason:
-                "Rejected by Human Operator",
+              reason: "Rejected by Human Operator",
             },
           };
         }
-
         return c;
       })
     );
 
-    showToast(
-      `Case ${txnOrCaseId} rejected and archived to Audit Trail.`
-    );
-
-    setSelectedReviewCase(
-      null
-    );
-
+    showToast(`Case ${txnOrCaseId} rejected and archived to Audit Trail.`);
+    setSelectedReviewCase(null);
     refreshLiveData();
   };
 
-  // ============================================================
-  // UI
-  // ============================================================
+  // Find an actionable transaction for the hero "RUN RECOVERY →" CTA
+  const handleHeroRunRecovery = () => {
+    const candidate = cases.find(
+      (c) =>
+        c.status !== "recovered" &&
+        c?.verification?.recovered !== true &&
+        !c?.guardrail?.requires_human_approval
+    );
+
+    const targetId = candidate?.transaction_id || candidate?.id || "pay_1002";
+    handleTriggerRecovery(targetId);
+  };
+
+  const handleHeroViewCases = () => {
+    const el = document.getElementById("cases-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    } else if (onViewAllCases) {
+      onViewAllCases();
+    }
+  };
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-16 pb-20">
+      {/* =====================================================
+          1. INFRASTRUCTURE HEALTH STATUS
+          ===================================================== */}
+      <SystemStatusPill isDbConnected={isLive} />
 
       {/* =====================================================
-          1. HERO COMMAND BANNER
+          2. HERO / COMMAND CENTER HEADER
           ===================================================== */}
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
-
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-
-            <span className="h-2 w-2 rounded-full bg-sky-500 shadow-[0_0_8px_#0284c7] radar-ping" />
-
-            <span className="text-xs font-mono font-bold tracking-wider text-sky-700 uppercase">
-              RecoverAI Mission Control
-            </span>
-
-          </div>
-
-          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Autonomous Revenue Recovery Engine
-          </h1>
-
-          <p className="text-xs sm:text-sm text-slate-500 font-sans mt-0.5">
-            Real-time failed payment diagnosis,
-            automated retention, and deterministic
-            safety guardrails.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-
-          <div className="px-3.5 py-2 rounded-xl glass-panel text-xs font-mono text-slate-700 flex items-center gap-2 bg-white/90 border-slate-200 shadow-xs">
-
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-
-            <span>
-              Autonomous Mode:{" "}
-              <strong className="text-slate-900">
-                Active
-              </strong>
-            </span>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          2. CORE METRICS
-          ===================================================== */}
-
-      <RevenueTracker
+      <Hero
         metrics={metrics}
+        pulseRecovery={pulseRecovery}
+        onViewPipeline={() => {
+          const el =
+            document.getElementById("recovery-pipeline-section") ||
+            document.getElementById("pipeline-diagram");
+          if (el) el.scrollIntoView({ behavior: "smooth" });
+        }}
+        onExploreCases={handleHeroViewCases}
       />
 
       {/* =====================================================
-          3. RAZORPAY TEST PAYMENT
+          3. CORE REVENUE METRICS
           ===================================================== */}
+      <RevenueTracker metrics={metrics} pulseRecovery={pulseRecovery} />
 
-      <GlassCard className="p-5">
+      {/* =====================================================
+          4. 3D CLOSED-LOOP RECOVERY PIPELINE & GUARDRAIL
+          ===================================================== */}
+      <ScrollPipelineExperience
+        activeCase={selectedReviewCase || cases?.[0]}
+        onApproveRecovery={handleApproveCase}
+        pulseRecovery={pulseRecovery}
+      />
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
-          <div className="flex items-center gap-3">
-
-            <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
-              <CreditCard size={20} />
-            </div>
-
-            <div>
-
-              <div className="text-sm font-bold text-slate-900">
-                Razorpay Payment Gateway
-              </div>
-
-              <div className="text-xs text-slate-500 mt-1">
-                Test the live Razorpay →
-                RecoverAI recovery flow.
-              </div>
-
-            </div>
-
+      {/* =====================================================
+          RAZORPAY LIVE PAYMENT TEST
+          ===================================================== */}
+      <GlassCard className="p-6 md:p-10 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <span className="font-mono text-xs uppercase tracking-wider text-[#797776]">
+              GATEWAY INTEGRATION / SIMULATED DISPATCH
+            </span>
+            <h3 className="font-serif text-2xl font-normal text-[#242424]">
+              LIVE PAYMENT TEST
+            </h3>
+            <p className="font-mono text-xs text-[#4e4d4d]">
+              Test the Razorpay → RecoverAI recovery loop.
+            </p>
           </div>
 
-          <Button
-            onClick={() =>
-              handleRazorpayPayment(
-                "pay_1002"
-              )
-            }
-            disabled={
-              razorpayLoadingId !== null
-            }
+          <button
+            type="button"
+            disabled={razorpayLoadingId !== null}
+            onClick={() => handleRazorpayPayment("pay_1005")}
+            className="px-8 py-3 rounded-[100px] bg-[#242424] hover:bg-[#4e4d4d] text-[#f6f3f1] font-mono text-xs uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
           >
-            {razorpayLoadingId ===
-              "pay_1002" ? (
+            {razorpayLoadingId === "pay_1005" ? (
               <>
-                <RefreshCw
-                  size={15}
-                  className="animate-spin"
-                />
-                Opening Checkout...
+                <RefreshCw size={14} className="animate-spin" />
+                <span>OPENING CHECKOUT...</span>
               </>
             ) : (
               <>
-                <CreditCard
-                  size={15}
-                />
-                Test ₹2,499 Payment
+                <CreditCard size={14} />
+                <span>TEST ₹1,999 PAYMENT →</span>
               </>
             )}
-          </Button>
-
+          </button>
         </div>
-
       </GlassCard>
 
       {/* =====================================================
-          4. LIVE RECOVERY STREAM
+          5. PRIORITY RECOVERY QUEUE
           ===================================================== */}
+      <RecoveryQueue onSelectCase={(item) => setSelectedJourneyCase(item)} />
 
-      <LiveCases
-        cases={cases}
-        onSelectCase={(item) =>
-          setSelectedReviewCase(
-            item
-          )
+      {/* =====================================================
+          6. RECOVERY SAFETY / CIRCUIT BREAKER
+          ===================================================== */}
+      <CircuitBreakerStatus />
+
+      {/* =====================================================
+          7. AI MODEL INTELLIGENCE
+          ===================================================== */}
+      <MLIntelligence />
+
+      {/* =====================================================
+          8. LIVE RECOVERY EVENT STREAM
+          ===================================================== */}
+      <RecoveryEventStream />
+
+      {/* =====================================================
+          10. RECOVERY FEEDBACK / LEARNING
+          ===================================================== */}
+      <RecoveryFeedback
+        transactionId={
+          selectedReviewCase?.transaction_id ||
+          selectedReviewCase?.id ||
+          cases?.[0]?.transaction_id ||
+          cases?.[0]?.id ||
+          "pay_1002"
         }
-        onTriggerRecovery={
-          handleTriggerRecovery
-        }
-        recoveringId={
-          recoveringId
-        }
-        maxItems={5}
-        onViewAll={
-          onViewAllCases
-        }
-        searchQuery={
-          searchQuery
+        action={
+          selectedReviewCase?.decision?.action ||
+          selectedReviewCase?.action ||
+          cases?.[0]?.decision?.action ||
+          cases?.[0]?.action ||
+          "send_payment_reminder"
         }
       />
 
       {/* =====================================================
-          5. HIGH-RISK REVIEW MODAL
+          ACTIVE CASES / INGESTION LEDGER
           ===================================================== */}
+      <LiveCases
+        cases={cases}
+        onSelectCase={(item) => setSelectedReviewCase(item)}
+        onSelectJourneyCase={(item) => setSelectedJourneyCase(item)}
+        onTriggerRecovery={handleTriggerRecovery}
+        onRazorpayPayment={handleRazorpayPayment}
+        recoveringId={recoveringId}
+        razorpayLoadingId={razorpayLoadingId}
+        maxItems={5}
+        onViewAll={onViewAllCases}
+        searchQuery={searchQuery}
+      />
 
+      {/* =====================================================
+          9. HUMAN REVIEW MODAL (Awaiting Authorization)
+          ===================================================== */}
       {selectedReviewCase && (
         <HighRiskReviewPanel
-          caseItem={
-            selectedReviewCase
-          }
-          onClose={() =>
-            setSelectedReviewCase(
-              null
-            )
-          }
-          onApprove={
-            handleApproveCase
-          }
-          onReject={
-            handleRejectCase
-          }
-          isApproving={
-            isApproving
-          }
+          caseItem={selectedReviewCase}
+          onClose={() => setSelectedReviewCase(null)}
+          onApprove={handleApproveCase}
+          onReject={handleRejectCase}
+          isApproving={isApproving}
         />
       )}
 
       {/* =====================================================
-          6. TOAST
+          CASE JOURNEY MODAL (7-Stage Path Inspection)
           ===================================================== */}
-
-      {toastMessage && (
-        <motion.div
-          initial={{
-            opacity: 0,
-            y: 30,
-            scale: 0.95,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-            scale: 1,
-          }}
-          exit={{
-            opacity: 0,
-            y: 30,
-            scale: 0.95,
-          }}
-          className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl bg-white/95 border border-emerald-300 text-slate-900 text-xs font-mono flex items-center gap-3 shadow-xl backdrop-blur-xl"
-        >
-
-          <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700">
-            <CheckCircle2
-              size={16}
-            />
-          </div>
-
-          <span>
-            {toastMessage}
-          </span>
-
-        </motion.div>
+      {selectedJourneyCase && (
+        <CaseJourneyModal
+          caseItem={selectedJourneyCase}
+          onClose={() => setSelectedJourneyCase(null)}
+          onTriggerRecovery={handleTriggerRecovery}
+          onRazorpayPayment={handleRazorpayPayment}
+          razorpayLoadingId={razorpayLoadingId}
+        />
       )}
 
+      {/* =====================================================
+          TOAST NOTIFICATION (Monad Pill)
+          ===================================================== */}
+      {toastMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-full bg-[#242424] text-[#f6f3f1] border border-[#cecac8] text-xs font-mono flex items-center gap-3 shadow-md"
+        >
+          <CheckCircle2 size={15} className="text-[#a7fccd]" />
+          <span>{toastMessage}</span>
+        </motion.div>
+      )}
     </div>
   );
 }

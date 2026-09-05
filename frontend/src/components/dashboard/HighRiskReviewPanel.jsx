@@ -1,15 +1,15 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
+  Brain,
+  TrendingUp,
   Lock,
-  Zap,
+  X,
 } from "lucide-react";
-
 import Button from "../ui/Button";
-import { playClickSound, playSuccessSound, playHoverSound } from "../../lib/soundFX";
+import { playClickSound, playSuccessSound } from "../../lib/soundFX";
 
 export default function HighRiskReviewPanel({
   caseItem,
@@ -25,7 +25,7 @@ export default function HighRiskReviewPanel({
 
   const amount = Number(caseItem.amount || 0);
   const diagnosis = caseItem.diagnosis || {};
-  const decision = caseItem.decision || {};
+  const decision = caseItem.decision || caseItem.recommended_strategy || {};
   const guardrail = caseItem.guardrail || {};
   const rules = Array.isArray(guardrail.triggered_rules)
     ? guardrail.triggered_rules
@@ -47,8 +47,8 @@ export default function HighRiskReviewPanel({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-slate-900/40 backdrop-blur-md">
-        {/* Animated backdrop click to dismiss */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-[#242424]/40 backdrop-blur-sm">
+        {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -57,179 +57,150 @@ export default function HighRiskReviewPanel({
           onClick={onClose}
         />
 
-        {/* ===================================================
-            MODAL CONTAINER (White Luxury Command Sheet)
-            =================================================== */}
+        {/* MODAL SHEET */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, scale: 0.96, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="relative w-full max-w-3xl rounded-2xl bg-white border border-rose-200 shadow-2xl overflow-hidden z-10 my-8 text-slate-900"
+          exit={{ opacity: 0, scale: 0.96, y: 15 }}
+          transition={{ duration: 0.22 }}
+          className="relative w-full max-w-3xl rounded-[32px] md:rounded-[40px] bg-[#f6f3f1] border border-[#cecac8] shadow-2xl overflow-hidden z-10 my-8 text-[#242424]"
         >
-          {/* TOP EMERGENCY RISK HEADER */}
-          <div className="px-6 py-4 bg-gradient-to-r from-rose-50 via-white to-slate-50 border-b border-rose-200 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-rose-100 border border-rose-200 text-rose-700 animate-pulse">
-                <ShieldAlert size={22} />
+          {/* TOP BAR */}
+          <div className="p-6 md:p-8 pb-4 border-b border-[#cecac8] flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2 font-mono text-xs uppercase tracking-wider text-[#797776]">
+                <span className="px-2.5 py-0.5 rounded-full border border-[#f37a0a] text-[#f37a0a] bg-[#f6f3f1]">
+                  HIGH-RISK CASES
+                </span>
+                <span>•</span>
+                <span>REQUIRES HUMAN APPROVAL</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-rose-700 uppercase tracking-wider">
-                    High-Risk Guardrail Intercept
-                  </span>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-                    RISK SCORE: {caseItem.risk_score || 87}/100
-                  </span>
-                </div>
-                <h2 className="font-display font-bold text-lg text-slate-900">
-                  Human Approval Dossier • {caseItem.case_id}
-                </h2>
-              </div>
+
+              <h2 className="font-serif text-2xl md:text-3xl font-normal text-[#242424]">
+                AI recommends. Humans authorize.
+              </h2>
+              <p className="font-mono text-xs text-[#797776] mt-1">
+                Dossier {caseItem.case_id || caseItem.transaction_id}
+              </p>
             </div>
 
             <button
               onClick={onClose}
-              onMouseEnter={playHoverSound}
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              type="button"
+              className="size-8 rounded-full border border-[#cecac8] bg-[#f6f3f1] hover:border-[#242424] flex items-center justify-center text-[#242424] transition-all cursor-pointer shrink-0"
+              title="Close modal"
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
 
-          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-            {/* ===================================================
-                1. TRANSACTION & CUSTOMER INTEL MATRIX
-                =================================================== */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
-                <span className="text-[10px] font-mono text-slate-500 uppercase block font-medium">
-                  Transaction Amount
+          <div className="p-6 md:p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* ESCALATION SUMMARY */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+              <div className="p-4 rounded-[20px] border border-[#cecac8] bg-[#f6f3f1]">
+                <span className="text-[10px] text-[#797776] uppercase block">
+                  AMOUNT AT RISK
                 </span>
-                <div className="font-mono-nums text-2xl font-extrabold text-rose-600">
+                <div className="font-serif text-2xl text-[#242424] mt-1">
                   ₹{amount.toLocaleString("en-IN")}
                 </div>
-                <span className="text-[10px] font-mono text-slate-500 block">
-                  TXN: {caseItem.transaction_id}
+                <span className="text-[10px] text-[#797776] mt-0.5 block">
+                  Ceiling: ₹10,000
                 </span>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
-                <span className="text-[10px] font-mono text-slate-500 uppercase block font-medium">
-                  Customer Profile
+              <div className="p-4 rounded-[20px] border border-[#cecac8] bg-[#f6f3f1]">
+                <span className="text-[10px] text-[#797776] uppercase block">
+                  CUSTOMER
                 </span>
-                <div className="font-semibold text-slate-900 text-base truncate">
+                <div className="font-serif text-xl text-[#242424] mt-1 truncate">
                   {caseItem.customer || "Enterprise Account"}
                 </div>
-                <span className="text-[11px] font-mono text-sky-700 font-semibold block">
-                  CLV: ₹{Number(caseItem.customer_clv || 1480000).toLocaleString("en-IN")}
+                <span className="text-[10px] text-[#797776] mt-0.5 block">
+                  {caseItem.customer_tier || "Standard Tier"}
                 </span>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
-                <span className="text-[10px] font-mono text-slate-500 uppercase block font-medium">
-                  Failure Vector
+              <div className="p-4 rounded-[20px] border border-[#cecac8] bg-[#f6f3f1]">
+                <span className="text-[10px] text-[#797776] uppercase block">
+                  FAILURE VECTOR
                 </span>
-                <div className="font-semibold text-amber-700 text-sm uppercase font-mono">
-                  {String(caseItem.failure_reason || "Gateway Failure").replace("_", " ")}
+                <div className="font-serif text-lg text-[#242424] mt-1 capitalize truncate">
+                  {String(caseItem.failure_reason || "Gateway Timeout").replaceAll("_", " ")}
                 </div>
-                <span className="text-[11px] font-mono text-slate-500 block">
-                  Detected: {caseItem.created_at || "Recent"}
+                <span className="text-[10px] text-[#797776] mt-0.5 block">
+                  {caseItem.created_at || "Recent event"}
                 </span>
               </div>
             </div>
 
-            {/* ===================================================
-                2. GUARDRAIL INTERCEPT RULE ENFORCEMENT
-                =================================================== */}
-            <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-200 space-y-3">
-              <div className="flex items-center gap-2 text-rose-800 font-mono text-xs font-bold">
-                <Lock size={15} />
-                <span>Deterministic Safety Guardrail Triggers (Halted Auto-Execution)</span>
+            {/* WHY ESCALATED: GUARDRAIL POLICY VIOLATIONS */}
+            <div className="p-5 rounded-[24px] border border-[#cecac8] bg-[#f6f3f1] space-y-3">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#242424]">
+                <Lock size={14} />
+                <span>Deterministic Guardrail Boundaries Triggered</span>
               </div>
-              <p className="text-xs text-slate-700 font-sans leading-relaxed">
+              <p className="font-mono text-xs text-[#4e4d4d] leading-relaxed">
                 {guardrail.reason ||
-                  "This transaction was intercepted before autonomous dispatch because its parameters exceed safety thresholds."}
+                  "Amount exceeds automatic execution ceiling (₹10,000). System halted autonomous dispatch."}
               </p>
               <div className="space-y-1.5 pt-1">
                 {rules.length > 0 ? (
                   rules.map((rule, idx) => (
                     <div
                       key={idx}
-                      className="flex items-start gap-2 text-xs font-mono text-rose-900 bg-white p-2.5 rounded-lg border border-rose-200 shadow-xs"
+                      className="font-mono text-xs text-[#242424] px-3 py-2 rounded-full border border-[#cecac8] bg-white flex items-center gap-2"
                     >
-                      <span className="text-rose-600 font-bold">•</span>
+                      <span className="size-1.5 rounded-full bg-[#f37a0a]" />
                       <span>{rule}</span>
                     </div>
                   ))
                 ) : (
-                  <div className="text-xs font-mono text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
-                    Manual authorization required by the deterministic safety guardrail.
+                  <div className="font-mono text-xs text-[#242424] px-3 py-2 rounded-full border border-[#cecac8] bg-white flex items-center gap-2">
+                    <span className="size-1.5 rounded-full bg-[#f37a0a]" />
+                    <span>Transaction amount ₹{amount.toLocaleString("en-IN")} &gt; ₹10,000 auto-recovery threshold</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* ===================================================
-                3. GEMINI AI DIAGNOSTIC INSIGHTS
-                =================================================== */}
-            <div className="p-4 rounded-xl bg-violet-50/70 border border-violet-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-violet-800 font-mono text-xs font-bold">
-                  <Sparkles size={15} />
-                  <span>Gemini Diagnostic Evaluation</span>
+            {/* GEMINI DIAGNOSIS & ML STRATEGY */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-[24px] border border-[#cecac8] bg-[#f6f3f1] space-y-2">
+                <div className="flex items-center justify-between font-mono text-xs uppercase tracking-wider text-[#797776]">
+                  <span className="flex items-center gap-1.5 text-[#242424]">
+                    <Brain size={13} />
+                    DIAGNOSIS
+                  </span>
+                  <span>{Math.round((diagnosis.confidence || 0.96) * 100)}% CONFIDENCE</span>
                 </div>
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200">
-                  {Math.round((diagnosis.confidence || 0.96) * 100)}% Confidence
-                </span>
-              </div>
-              <p className="text-sm text-slate-800 font-sans leading-relaxed">
-                {diagnosis.diagnosis ||
-                  "Primary gateway failed due to core banking connection timeout. User attempted multiple times with strong payment intent."}
-              </p>
-              <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-slate-600 pt-1">
-                <span>
-                  Severity:{" "}
-                  <strong className="text-amber-700 uppercase">
-                    {diagnosis.severity || "medium"}
-                  </strong>
-                </span>
-
-                <span>
-                  Source:{" "}
-                  <strong className={diagnosis.ai_generated ? "text-violet-700" : "text-slate-600"}>
-                    {diagnosis.ai_generated ? "Gemini AI" : "Deterministic Fallback"}
-                  </strong>
-                </span>
-              </div>
-            </div>
-
-            {/* ===================================================
-                4. RECOMMENDED RECOVERY STRATEGY
-                =================================================== */}
-            <div className="p-4 rounded-xl bg-sky-50/60 border border-sky-200 space-y-2">
-              <div className="flex items-center gap-2 text-sky-800 font-mono text-xs font-bold">
-                <Zap size={15} />
-                <span>Proposed Recovery Action (Awaiting Authorization)</span>
-              </div>
-              <p className="text-sm text-slate-900 font-medium">
-                {decision.action ||
-                  "Switch transaction to Secondary Clearing Gateway with 1-Click Priority PayLink"}
-              </p>
-              {decision.reason && (
-                <p className="text-xs text-slate-600 font-sans">
-                  Reason: {decision.reason}
+                <p className="font-mono text-xs text-[#4e4d4d] leading-relaxed mt-1">
+                  {diagnosis.diagnosis ||
+                    "Gateway connection terminated abruptly. User intent remains active."}
                 </p>
-              )}
+              </div>
+
+              <div className="p-5 rounded-[24px] border border-[#cecac8] bg-[#f6f3f1] space-y-2">
+                <div className="flex items-center justify-between font-mono text-xs uppercase tracking-wider text-[#797776]">
+                  <span className="flex items-center gap-1.5 text-[#242424]">
+                    <TrendingUp size={13} />
+                    PROPOSED STRATEGY
+                  </span>
+                  <span>EST. PROBABILITY: {Math.round((caseItem.recovery_probability || 0.74) * 100)}%</span>
+                </div>
+                <p className="font-mono text-xs text-[#242424] font-medium mt-1 uppercase">
+                  {String(decision.action || "SWITCH GATEWAY ROUTE").replaceAll("_", " ")}
+                </p>
+                <p className="font-mono text-[11px] text-[#797776]">
+                  {decision.reason || "Secondary routing clears pending settlement directly."}
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* ===================================================
-              5. TACTILE ACTION FOOTER WITH OVERRIDE AUTHORIZATION
-              =================================================== */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 space-y-3">
-            {/* OPERATOR OVERRIDE CHECKBOX */}
-            <label className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-emerald-300/80 cursor-pointer select-none hover:border-emerald-500 transition-colors shadow-xs">
+          {/* ACTION FOOTER */}
+          <div className="p-6 md:p-8 pt-4 border-t border-[#cecac8] bg-[#f6f3f1] space-y-4">
+            <label className="flex items-center gap-3 p-3 rounded-full border border-[#cecac8] bg-white cursor-pointer select-none hover:border-[#242424] transition-colors">
               <input
                 type="checkbox"
                 checked={overrideConfirmed}
@@ -237,39 +208,39 @@ export default function HighRiskReviewPanel({
                   playClickSound();
                   setOverrideConfirmed(e.target.checked);
                 }}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20 bg-white cursor-pointer"
+                className="size-4 rounded border-[#cecac8] text-[#242424] focus:ring-0 cursor-pointer accent-[#242424]"
               />
-              <span className="text-xs font-mono text-slate-800 font-medium">
+              <span className="font-mono text-xs text-[#242424]">
                 I have inspected the Gemini dossier and authorize execution override for this transaction.
               </span>
             </label>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-              <div className="text-[11px] font-mono text-slate-500">
-                Audit log will cryptographically record your operator signature.
-              </div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="font-mono text-[11px] text-[#797776]">
+                Immutable cryptographic ledger will record operator approval.
+              </span>
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                <Button
-                  variant="ghost"
-                  size="md"
+                <button
+                  type="button"
                   onClick={handleReject}
-                  className="text-slate-600 hover:text-rose-600 text-xs font-medium"
+                  className="px-6 py-2.5 rounded-full border border-[#242424] bg-transparent text-[#242424] font-mono text-xs uppercase tracking-wider hover:bg-[#242424] hover:text-[#f6f3f1] transition-colors cursor-pointer"
                 >
-                  Safe Abort / Reject
-                </Button>
+                  REJECT
+                </button>
 
-                <Button
-                  variant="success"
-                  size="md"
+                <button
+                  type="button"
                   disabled={!overrideConfirmed || isApproving}
-                  loading={isApproving}
-                  icon={ShieldCheck}
                   onClick={handleApprove}
-                  className="shadow-md text-xs font-mono"
+                  className={`px-6 py-2.5 rounded-full font-mono text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                    overrideConfirmed && !isApproving
+                      ? "bg-[#2b59d1] text-white hover:opacity-90"
+                      : "bg-[#cecac8] text-[#797776] cursor-not-allowed"
+                  }`}
                 >
-                  Approve & Execute Override
-                </Button>
+                  {isApproving ? "AUTHORIZING..." : "APPROVE RECOVERY →"}
+                </button>
               </div>
             </div>
           </div>

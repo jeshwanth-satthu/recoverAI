@@ -10,7 +10,14 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 if not MONGODB_URI:
     raise RuntimeError("MONGODB_URI is not configured in .env")
 
-client = MongoClient(MONGODB_URI)
+try:
+    client = MongoClient(MONGODB_URI)
+except Exception:
+    try:
+        import certifi
+        client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where())
+    except Exception:
+        client = MongoClient(MONGODB_URI)
 
 db = client["recoverai"]
 
@@ -21,6 +28,7 @@ audit_logs_collection = db["audit_logs"]
 agent_runs_collection = db["agent_runs"]
 policies_collection = db["policies"]
 experiments_collection = db["experiments"]
+recovery_feedback_collection = db["recovery_feedback"]
 
 
 def check_database_connection():

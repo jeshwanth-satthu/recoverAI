@@ -70,3 +70,37 @@ export async function createRazorpayOrder(transactionId) {
         }
     );
 }
+
+export function verifyRazorpayPayment(payload) {
+    return request("/api/razorpay/verify-payment", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export function resetDemoData() {
+    return request("/api/demo/reset", {
+        method: "POST",
+    });
+}
+
+export function getRecoveryAnomaly() {
+    return request("/api/recovery-anomaly");
+}
+
+export function getMLStatus() {
+    return request("/api/ml/status");
+}
+
+export function getRecoveryPriority() {
+    return request("/api/recovery-priority");
+}
+
+export function submitRecoveryFeedback(transactionId, { action, feedback }) {
+    return request(`/api/recovery/${transactionId}/feedback`, {
+        method: "POST",
+        body: JSON.stringify({ action, feedback }),
+    });
+}
+
+export { API_BASE_URL };

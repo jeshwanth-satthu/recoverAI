@@ -1,12 +1,14 @@
 from datetime import datetime
+from typing import Optional
 
 from bson import ObjectId
 
-from app.database import audit_logs_collection
 from app.database import (
     audit_logs_collection,
     recovery_cases_collection,
+    transactions_collection,
 )
+from app.anomaly_detector import detect_recovery_anomaly
 from app.repositories.transaction_repository import (
     get_transaction,
     get_all_transactions,
@@ -30,6 +32,7 @@ from app.agents.decision_agent import decision_agent
 from app.agents.guardrail_agent import guardrail_agent
 from app.agents.executor_agent import executor_agent
 from app.agents.verifier_agent import verifier_agent
+from app.strategy_optimizer import optimize_recovery_strategy
 
 
 # =============================================================
@@ -168,6 +171,43 @@ def recover_transaction(transaction_id: str):
         })
 
     # =========================================================
+    # GLOBAL RECOVERY SAFETY CHECK (CIRCUIT BREAKER)
+    # =========================================================
+
+    all_transactions = list(
+        transactions_collection.find(
+            {},
+            {"_id": 0}
+        )
+    )
+
+    anomaly = detect_recovery_anomaly(
+        all_transactions
+    )
+
+    if anomaly.get("circuit_breaker"):
+        update_recovery_case(
+            case_id,
+            {
+                "status": "circuit_breaker",
+                "anomaly": anomaly,
+                "requires_human_approval": True,
+            },
+        )
+        return serialize_mongo({
+            "success": False,
+            "transaction_id": transaction_id,
+            "status": "circuit_breaker",
+            "message": (
+                "Automatic recovery temporarily blocked "
+                "because payment failures are significantly "
+                "above the normal baseline."
+            ),
+            "anomaly": anomaly,
+            "requires_human_approval": True,
+        })
+
+    # =========================================================
     # 5. GEMINI DIAGNOSIS AGENT
     # =========================================================
 
@@ -193,10 +233,26 @@ def recover_transaction(transaction_id: str):
         customer_profile,
     )
 
+    ml_strategy = optimize_recovery_strategy(transaction)
+
+    if not ml_strategy.get("requires_human_review", False):
+        recommended = ml_strategy["recommended_strategy"]
+
+        decision.update({
+            "action": recommended["action"],
+            "confidence": recommended["probability"],
+            "ai_generated": True,
+            "ml_optimized": True,
+            "recovery_probability": recommended["probability"],
+            "expected_recovery_value":
+                recommended["expected_recovery_value"],
+        })
+
     update_recovery_case(
         case_id,
         {
             "decision": decision,
+            "ml_strategy": ml_strategy,
         },
     )
 
@@ -261,6 +317,7 @@ def recover_transaction(transaction_id: str):
             "decision": decision,
             "guardrail": guardrail,
             "status": case_status,
+            "ml_strategy": ml_strategy,
         })
 
     # =========================================================
@@ -270,12 +327,14 @@ def recover_transaction(transaction_id: str):
     execution = executor_agent(
         transaction,
         decision,
+        customer_profile,
     )
 
     update_recovery_case(
         case_id,
         {
             "execution": execution,
+            "recovery_message": execution.get("recovery_message"),
         },
     )
 
@@ -426,6 +485,8 @@ def recover_transaction(transaction_id: str):
         "guardrail": guardrail,
         "execution": execution,
         "verification": verification,
+        "ml_strategy": ml_strategy,
+        "anomaly": anomaly,
     }
 
     # IMPORTANT:
@@ -764,15 +825,20 @@ def approve_recovery(transaction_id: str):
     # 5. EXECUTE THE ORIGINAL AI DECISION
     # =========================================================
 
+    email = transaction.get("email")
+    customer_profile = get_or_create_customer(email) if email else None
+
     execution = executor_agent(
         transaction,
         decision,
+        customer_profile,
     )
 
     update_recovery_case(
         case_id,
         {
             "execution": execution,
+            "recovery_message": execution.get("recovery_message"),
         },
     )
 
@@ -939,3 +1005,147 @@ def approve_recovery(transaction_id: str):
     }
 
     return serialize_mongo(result)
+
+
+# =============================================================
+# AUTHORITATIVE RAZORPAY PAYMENT RECOVERY
+# =============================================================
+
+def mark_payment_recovered(
+    transaction_id: Optional[str] = None,
+    payment_id: Optional[str] = None,
+    order_id: Optional[str] = None,
+    amount: Optional[float] = None,
+    signature: Optional[str] = None,
+    verification_method: str = "razorpay_checkout",
+):
+    """
+    Atomically mark a transaction and its recovery case as RECOVERED
+    upon genuine Razorpay verification.
+
+    CRITICAL INVARIANT:
+    This is the authoritative function in RecoverAI that sets recovered=True
+    and updates recovered revenue in MongoDB.
+    """
+    query = {}
+    if transaction_id:
+        query["id"] = transaction_id
+    elif order_id:
+        query["razorpay_order_id"] = order_id
+    elif payment_id:
+        query["razorpay_payment_id"] = payment_id
+
+    transaction = transactions_collection.find_one(query) if query else None
+
+    if not transaction and order_id:
+        transaction = transactions_collection.find_one({"razorpay_order_id": order_id})
+
+    if not transaction and transaction_id:
+        transaction = get_transaction(transaction_id)
+
+    if not transaction:
+        return {
+            "success": False,
+            "error": "Matching transaction not found for payment recovery",
+            "transaction_id": transaction_id,
+            "payment_id": payment_id,
+            "order_id": order_id,
+        }
+
+    actual_transaction_id = transaction["id"]
+    recovered_amount = float(amount if amount is not None else transaction.get("amount", 0))
+
+    # 1. Update Transaction
+    now_iso = datetime.now().isoformat()
+    transactions_collection.update_one(
+        {"id": actual_transaction_id},
+        {
+            "$set": {
+                "status": "success",
+                "recoverable": False,
+                "razorpay_payment_id": payment_id,
+                "razorpay_order_id": order_id or transaction.get("razorpay_order_id"),
+                "recovered_at": now_iso,
+                "verified_by": verification_method,
+            }
+        },
+    )
+
+    # 2. Update Recovery Case
+    case = recovery_cases_collection.find_one(
+        {"transaction_id": actual_transaction_id},
+        sort=[("_id", -1)],
+    )
+
+    verification_doc = {
+        "verified": True,
+        "recovered": True,
+        "amount_recovered": recovered_amount,
+        "payment_id": payment_id,
+        "order_id": order_id,
+        "method": verification_method,
+        "verified_at": now_iso,
+        "signature_verified": bool(signature),
+    }
+
+    case_id = case.get("case_id") if case else f"case_{actual_transaction_id}"
+
+    if case:
+        recovery_cases_collection.update_one(
+            {"_id": case["_id"]},
+            {
+                "$set": {
+                    "status": "recovered",
+                    "amount_recovered": recovered_amount,
+                    "verification": verification_doc,
+                    "recovered_at": now_iso,
+                }
+            },
+        )
+    else:
+        recovery_cases_collection.insert_one({
+            "case_id": case_id,
+            "transaction_id": actual_transaction_id,
+            "customer": transaction.get("customer"),
+            "amount": recovered_amount,
+            "status": "recovered",
+            "amount_recovered": recovered_amount,
+            "verification": verification_doc,
+            "created_at": now_iso,
+            "recovered_at": now_iso,
+        })
+
+    # 3. Add Authoritative Audit Log
+    audit_logs_collection.insert_one({
+        "timestamp": now_iso,
+        "case_id": case_id,
+        "transaction_id": actual_transaction_id,
+        "customer": transaction.get("customer", "Customer"),
+        "action": "razorpay_payment_verified",
+        "status": "recovered",
+        "amount_recovered": recovered_amount,
+        "diagnosis": f"Payment verified via Razorpay {verification_method} [{payment_id}]",
+        "guardrail": "Passed - Cryptographically verified payment",
+        "ai_generated": False,
+        "payment_id": payment_id,
+        "order_id": order_id,
+    })
+
+    # 4. Refresh customer profile
+    if transaction.get("email"):
+        try:
+            refresh_customer_profile(transaction["email"])
+        except Exception:
+            pass
+
+    return serialize_mongo({
+        "success": True,
+        "transaction_id": actual_transaction_id,
+        "case_id": case_id,
+        "status": "recovered",
+        "amount_recovered": recovered_amount,
+        "payment_id": payment_id,
+        "order_id": order_id,
+        "verification": verification_doc,
+        "message": f"Payment of ₹{recovered_amount:,.2f} successfully verified and marked RECOVERED.",
+    })

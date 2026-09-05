@@ -1,13 +1,15 @@
-def executor_agent(transaction, decision):
+from app.services.message_service import generate_customer_recovery_message
+
+
+def executor_agent(transaction, decision, customer_profile=None):
     """
-    Execute a bounded simulated recovery action.
+    Execute a bounded recovery action dispatch.
 
-    IMPORTANT:
-    This is a simulation for the buildathon.
-    It does not move real money.
-
-    The executor is intentionally deterministic so that
-    the same AI decision produces a reproducible demo result.
+    CRITICAL INVARIANTS:
+    - An AI decision or dispatched reminder does NOT equal a recovered payment.
+    - The executor agent MUST NOT declare a payment recovered on its own.
+    - Recovered revenue must NEVER increase simply because an agent ran.
+    - Status remains 'pending' / 'action_dispatched' until real payment verification.
     """
 
     action = decision.get(
@@ -25,6 +27,22 @@ def executor_agent(transaction, decision):
     )
 
     # ---------------------------------------------------------
+    # Generate Customer Recovery Message for customer actions
+    # ---------------------------------------------------------
+    recovery_message = None
+    if action in {
+        "send_payment_reminder",
+        "send_checkout_reminder",
+        "request_payment_method_update",
+        "retry_payment",
+    }:
+        recovery_message = generate_customer_recovery_message(
+            transaction,
+            decision,
+            customer_profile
+        )
+
+    # ---------------------------------------------------------
     # No action
     # ---------------------------------------------------------
 
@@ -36,7 +54,8 @@ def executor_agent(transaction, decision):
             "action": action,
             "recovered": False,
             "amount_recovered": 0,
-            "transaction_id": transaction_id
+            "transaction_id": transaction_id,
+            "recovery_message": None,
         }
 
     # ---------------------------------------------------------
@@ -48,13 +67,14 @@ def executor_agent(transaction, decision):
         return {
             "status": "pending",
             "message": (
-                "Recovery requires human approval"
+                "Recovery requires human approval before dispatch"
             ),
             "action": action,
             "recovered": False,
             "amount_recovered": 0,
             "requires_human_approval": True,
-            "transaction_id": transaction_id
+            "transaction_id": transaction_id,
+            "recovery_message": recovery_message,
         }
 
     # ---------------------------------------------------------
@@ -64,12 +84,14 @@ def executor_agent(transaction, decision):
     if action == "retry_payment":
 
         return {
-            "status": "success",
-            "message": "Payment retry succeeded",
+            "status": "pending",
+            "message": "Payment retry scheduled. Awaiting gateway settlement.",
             "action": action,
-            "recovered": True,
-            "amount_recovered": amount,
-            "transaction_id": transaction_id
+            "recovered": False,
+            "amount_recovered": 0,
+            "action_dispatched": True,
+            "transaction_id": transaction_id,
+            "recovery_message": recovery_message,
         }
 
     # ---------------------------------------------------------
@@ -81,13 +103,15 @@ def executor_agent(transaction, decision):
         return {
             "status": "pending",
             "message": (
-                "Payment reminder sent; "
-                "customer has not completed payment"
+                "Personalized payment recovery reminder generated. "
+                "Awaiting customer payment completion."
             ),
             "action": action,
             "recovered": False,
             "amount_recovered": 0,
-            "transaction_id": transaction_id
+            "action_dispatched": True,
+            "transaction_id": transaction_id,
+            "recovery_message": recovery_message,
         }
 
     # ---------------------------------------------------------
@@ -99,13 +123,15 @@ def executor_agent(transaction, decision):
         return {
             "status": "pending",
             "message": (
-                "Checkout reminder sent; "
-                "customer has not returned"
+                "Personalized checkout recovery reminder generated. "
+                "Awaiting customer return and settlement."
             ),
             "action": action,
             "recovered": False,
             "amount_recovered": 0,
-            "transaction_id": transaction_id
+            "action_dispatched": True,
+            "transaction_id": transaction_id,
+            "recovery_message": recovery_message,
         }
 
     # ---------------------------------------------------------
@@ -115,15 +141,17 @@ def executor_agent(transaction, decision):
     if action == "request_payment_method_update":
 
         return {
-            "status": "success",
+            "status": "pending",
             "message": (
-                "Payment method updated and "
-                "payment recovered"
+                "Payment method update request generated. "
+                "Awaiting customer card update and settlement."
             ),
             "action": action,
-            "recovered": True,
-            "amount_recovered": amount,
-            "transaction_id": transaction_id
+            "recovered": False,
+            "amount_recovered": 0,
+            "action_dispatched": True,
+            "transaction_id": transaction_id,
+            "recovery_message": recovery_message,
         }
 
     # ---------------------------------------------------------
@@ -138,5 +166,6 @@ def executor_agent(transaction, decision):
         "action": action,
         "recovered": False,
         "amount_recovered": 0,
-        "transaction_id": transaction_id
+        "transaction_id": transaction_id,
+        "recovery_message": None,
     }

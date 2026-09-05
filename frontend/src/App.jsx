@@ -5,16 +5,28 @@ import LiveCases from "./components/dashboard/LiveCases";
 import HighRiskReviewPanel from "./components/dashboard/HighRiskReviewPanel";
 import CustomerIntel from "./components/dashboard/CustomerIntel";
 import AuditTimeline from "./components/dashboard/AuditTimeline";
+import Login from "./pages/Login";
 
 import { INITIAL_METRICS, INITIAL_CASES } from "./lib/mockData";
 import {
   getDashboard,
   getRecoveryCases,
   getDatabaseHealth,
+  recoverTransaction,
+  approveRecovery,
+  resetDemoData,
 } from "./services/api";
+import {
+  isAuthenticated,
+  getCurrentUser,
+  logout,
+  subscribeAuth,
+} from "./services/auth";
 import { playClickSound, playSuccessSound } from "./lib/soundFX";
 
 export default function App() {
+  const [isAuthed, setIsAuthed] = useState(() => isAuthenticated());
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [activeTab, setActiveTab] = useState("dashboard");
   const [metrics, setMetrics] = useState(INITIAL_METRICS);
   const [cases, setCases] = useState(INITIAL_CASES);
@@ -22,43 +34,98 @@ export default function App() {
   const [isDbConnected, setIsDbConnected] = useState(true);
   const [globalSearch, setGlobalSearch] = useState("");
 
-  // Load live data from FastAPI backend with automatic graceful fallback
+  // Keep auth state in sync with session listener
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [dashRes, casesRes, healthRes] = await Promise.allSettled([
-          getDashboard(),
-          getRecoveryCases(),
-          getDatabaseHealth(),
-        ]);
-
-        if (dashRes.status === "fulfilled" && dashRes.value) {
-          setMetrics((prev) => ({
-            ...prev,
-            ...dashRes.value,
-          }));
-        }
-
-        if (
-          casesRes.status === "fulfilled" &&
-          casesRes.value?.cases &&
-          Array.isArray(casesRes.value.cases) &&
-          casesRes.value.cases.length > 0
-        ) {
-          // Merge backend cases with rich mock fields
-          setCases(casesRes.value.cases);
-        }
-
-        if (healthRes.status === "fulfilled") {
-          setIsDbConnected(healthRes.value?.connected === true);
-        }
-      } catch (err) {
-        console.warn("Backend initialization fallback active:", err);
-      }
-    }
-
-    loadData();
+    const unsubscribe = subscribeAuth(({ isAuthenticated: authed, user }) => {
+      setIsAuthed(authed);
+      setCurrentUser(user);
+    });
+    return unsubscribe;
   }, []);
+
+  const handleAuthSuccess = (user) => {
+    setIsAuthed(true);
+    setCurrentUser(user);
+    playSuccessSound();
+  };
+
+  const handleLogout = () => {
+    playClickSound();
+    logout();
+    setIsAuthed(false);
+    setCurrentUser(null);
+  };
+
+  // Load live data from FastAPI backend
+  const reloadAllData = async () => {
+    try {
+      const [dashRes, casesRes, healthRes] = await Promise.allSettled([
+        getDashboard(),
+        getRecoveryCases(),
+        getDatabaseHealth(),
+      ]);
+
+      if (dashRes.status === "fulfilled" && dashRes.value) {
+        setMetrics((prev) => ({
+          ...prev,
+          ...dashRes.value,
+        }));
+      }
+
+      if (
+        casesRes.status === "fulfilled" &&
+        casesRes.value?.cases &&
+        Array.isArray(casesRes.value.cases) &&
+        casesRes.value.cases.length > 0
+      ) {
+        setCases(casesRes.value.cases);
+      }
+
+      if (healthRes.status === "fulfilled") {
+        setIsDbConnected(healthRes.value?.connected === true);
+      }
+    } catch (err) {
+      console.warn("Backend sync error:", err);
+    }
+  };
+
+  useEffect(() => {
+    reloadAllData();
+  }, []);
+
+  const handleResetDemo = async () => {
+    playClickSound();
+    try {
+      await resetDemoData();
+      await reloadAllData();
+      playSuccessSound();
+    } catch (err) {
+      console.error("Failed to reset demo data:", err);
+    }
+  };
+
+  const handleTriggerRecoveryApp = async (txnId) => {
+    playClickSound();
+    try {
+      await recoverTransaction(txnId);
+      await reloadAllData();
+      playSuccessSound();
+    } catch (err) {
+      console.error("Trigger recovery failed:", err);
+    }
+  };
+
+  const handleApproveCaseApp = async (id) => {
+    playClickSound();
+    try {
+      await approveRecovery(id);
+      await reloadAllData();
+      setSelectedReviewCase(null);
+      playSuccessSound();
+    } catch (err) {
+      console.error("Approval failed:", err);
+    }
+  };
 
   const pendingReviewCount = useMemo(() => {
     return cases.filter(
@@ -116,8 +183,12 @@ export default function App() {
     setSelectedReviewCase(newCase);
   };
 
+  if (!isAuthed) {
+    return <Login onAuthSuccess={handleAuthSuccess} />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-[#f6f3f1] text-[#242424] font-mono">
       <AppLayout
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -125,11 +196,14 @@ export default function App() {
         metrics={metrics}
         isDbConnected={isDbConnected}
         onTriggerDemo={handleTriggerDemo}
+        onResetDemo={handleResetDemo}
         searchQuery={globalSearch}
         setSearchQuery={(query) => {
           setGlobalSearch(query);
           if (query.trim()) setActiveTab("cases");
         }}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       >
         {activeTab === "dashboard" && (
           <Dashboard
@@ -149,16 +223,7 @@ export default function App() {
             <LiveCases
               cases={cases}
               onSelectCase={(item) => setSelectedReviewCase(item)}
-              onTriggerRecovery={(txnId) => {
-                setCases((prev) =>
-                  prev.map((c) =>
-                    c.transaction_id === txnId
-                      ? { ...c, status: "recovered", amount_recovered: c.amount }
-                      : c
-                  )
-                );
-                playSuccessSound();
-              }}
+              onTriggerRecovery={handleTriggerRecoveryApp}
               searchQuery={globalSearch}
             />
           </div>
@@ -187,7 +252,7 @@ export default function App() {
                   c.guardrail?.requires_human_approval
               )}
               onSelectCase={(item) => setSelectedReviewCase(item)}
-              onTriggerRecovery={() => {}}
+              onTriggerRecovery={handleTriggerRecoveryApp}
               searchQuery={globalSearch}
             />
           </div>
@@ -203,17 +268,7 @@ export default function App() {
         <HighRiskReviewPanel
           caseItem={selectedReviewCase}
           onClose={() => setSelectedReviewCase(null)}
-          onApprove={(id) => {
-            setCases((prev) =>
-              prev.map((c) =>
-                c.transaction_id === id || c.case_id === id
-                  ? { ...c, status: "recovered", amount_recovered: c.amount }
-                  : c
-              )
-            );
-            setSelectedReviewCase(null);
-            playSuccessSound();
-          }}
+          onApprove={(id) => handleApproveCaseApp(id)}
           onReject={(id) => {
             setCases((prev) =>
               prev.map((c) =>
