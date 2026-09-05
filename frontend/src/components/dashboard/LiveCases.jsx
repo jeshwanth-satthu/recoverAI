@@ -29,15 +29,29 @@ export default function LiveCases({
   const [search, setSearch] = useState("");
 
   const uniqueCases = useMemo(() => {
+    if (!Array.isArray(cases)) return [];
     const grouped = new Map();
 
     for (const item of cases) {
-      const key = item?.transaction_id || item?.case_id;
+      if (!item) continue;
+      const key = item.transaction_id || item.case_id || item.id;
       if (!key) continue;
 
       const existing = grouped.get(key);
       if (!existing) {
         grouped.set(key, item);
+        continue;
+      }
+
+      // If one is real (persisted) and one is virtual, prefer the real persisted case
+      const existingVirtual = existing.is_virtual === true || String(existing.is_virtual) === "true";
+      const currentVirtual = item.is_virtual === true || String(item.is_virtual) === "true";
+
+      if (existingVirtual && !currentVirtual) {
+        grouped.set(key, item);
+        continue;
+      }
+      if (!existingVirtual && currentVirtual) {
         continue;
       }
 
@@ -78,7 +92,8 @@ export default function LiveCases({
       const isHuman =
         !isRecovered &&
         (item?.status === "human_approval" ||
-          item?.guardrail?.requires_human_approval === true);
+          item?.guardrail?.requires_human_approval === true ||
+          String(item?.risk_level).toUpperCase() === "HIGH");
 
       if (filter === "human_approval" && !isHuman) return false;
       if (filter === "recovered" && !isRecovered) return false;
@@ -92,6 +107,7 @@ export default function LiveCases({
           item?.case_id,
           item?.transaction_id,
           item?.customer,
+          item?.customer_name,
           item?.failure_reason,
           item?.diagnosis?.diagnosis,
         ]
@@ -116,7 +132,8 @@ export default function LiveCases({
       return (
         !recovered &&
         (c?.status === "human_approval" ||
-          c?.guardrail?.requires_human_approval === true)
+          c?.guardrail?.requires_human_approval === true ||
+          String(c?.risk_level).toUpperCase() === "HIGH")
       );
     }).length;
   }, [uniqueCases]);
@@ -135,7 +152,7 @@ export default function LiveCases({
             Active Recovery Cases
           </h3>
           <p className="font-mono text-xs text-[#797776] mt-0.5">
-            {filteredCases.length} transactions in telemetry index
+            {uniqueCases.length} transactions in recovery workload
           </p>
         </div>
 
@@ -143,6 +160,7 @@ export default function LiveCases({
         <div className="flex flex-wrap items-center gap-2.5">
           {onViewAll && (
             <button
+              type="button"
               onClick={onViewAll}
               className="px-4 py-1.5 rounded-full border border-[#cecac8] bg-[#f6f3f1] hover:border-[#242424] text-xs font-mono text-[#242424] uppercase tracking-wider transition-colors cursor-pointer"
             >
@@ -221,6 +239,7 @@ export default function LiveCases({
       <div className="space-y-4">
         <AnimatePresence mode="popLayout">
           {visibleCases.map((item) => {
+            const isVirtual = item?.is_virtual === true || String(item?.is_virtual) === "true";
             const isRecovered =
               item?.status === "recovered" ||
               item?.verification?.recovered === true;
@@ -228,8 +247,14 @@ export default function LiveCases({
             const isHuman =
               !isRecovered &&
               (item?.status === "human_approval" ||
-                item?.guardrail?.requires_human_approval === true);
+                item?.guardrail?.requires_human_approval === true ||
+                String(item?.risk_level).toUpperCase() === "HIGH");
+
             const amount = Number(item?.amount || 0);
+
+            const displayDiagnosis =
+              item?.diagnosis?.diagnosis ||
+              (isVirtual ? "Awaiting recovery analysis" : "Root cause analyzed.");
 
             return (
               <motion.div
@@ -263,6 +288,10 @@ export default function LiveCases({
                           <span className="px-2.5 py-0.5 rounded-full border border-[#059669] text-[#059669] uppercase tracking-wider text-[11px]">
                             AUTO-RECOVERED ✓
                           </span>
+                        ) : isVirtual || item?.status === "pending" ? (
+                          <span className="px-2.5 py-0.5 rounded-full border border-[#797776] text-[#797776] uppercase tracking-wider text-[11px]">
+                            PENDING
+                          </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full border border-[#2b59d1] text-[#2b59d1] uppercase tracking-wider text-[11px]">
                             IN PIPELINE
@@ -276,7 +305,7 @@ export default function LiveCases({
 
                       <div className="flex flex-wrap items-baseline gap-4">
                         <span className="font-serif text-xl font-normal text-[#242424]">
-                          {item.customer || "Enterprise Account"}
+                          {item.customer || item.customer_name || "Enterprise Account"}
                         </span>
 
                         <span className="font-mono text-xs text-[#797776]">
@@ -288,14 +317,12 @@ export default function LiveCases({
                       </div>
 
                       {/* GEMINI DIAGNOSIS */}
-                      {item.diagnosis && (
-                        <p className="font-mono text-xs text-[#4e4d4d] line-clamp-1">
-                          <strong className="text-[#242424] mr-1.5">
-                            GEMINI DIAGNOSIS:
-                          </strong>
-                          {item.diagnosis.diagnosis}
-                        </p>
-                      )}
+                      <p className="font-mono text-xs text-[#4e4d4d] line-clamp-1">
+                        <strong className="text-[#242424] mr-1.5">
+                          GEMINI DIAGNOSIS:
+                        </strong>
+                        {displayDiagnosis}
+                      </p>
                     </div>
 
                     {/* RIGHT SECTION: VALUE & ACTION TRIGGER */}
@@ -341,9 +368,7 @@ export default function LiveCases({
                             ↗
                           </button>
                         </div>
-                      ) : item.status === "pending" ||
-                        item.status === "action_dispatched" ||
-                        item.execution?.status === "success" ? (
+                      ) : (
                         <div className="flex items-center gap-2">
                           {onRazorpayPayment && (
                             <button
@@ -364,23 +389,13 @@ export default function LiveCases({
                             type="button"
                             disabled={recoveringId === item.transaction_id}
                             onClick={() => onTriggerRecovery(item.transaction_id)}
-                            className="px-3 py-2 rounded-full border border-[#cecac8] bg-white text-[#4e4d4d] hover:border-[#242424] font-mono text-[11px] uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
-                            title="Re-run Autonomous Agents"
+                            className="px-6 py-2 rounded-full border border-[#242424] bg-[#242424] text-white hover:bg-[#4e4d4d] font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                           >
-                            RE-RUN
+                            {recoveringId === item.transaction_id
+                              ? "PROCESSING..."
+                              : "TRIGGER AI →"}
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={recoveringId === item.transaction_id}
-                          onClick={() => onTriggerRecovery(item.transaction_id)}
-                          className="px-6 py-2 rounded-full border border-[#2b59d1] bg-[#2b59d1] text-white hover:opacity-90 font-mono text-xs uppercase tracking-wider transition-opacity cursor-pointer disabled:opacity-50"
-                        >
-                          {recoveringId === item.transaction_id
-                            ? "PROCESSING..."
-                            : "TRIGGER AI →"}
-                        </button>
                       )}
                     </div>
                   </div>
