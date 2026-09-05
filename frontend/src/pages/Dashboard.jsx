@@ -75,37 +75,41 @@ export default function Dashboard({
 
   const refreshLiveData = async () => {
     try {
-      const [dashboardResponse, casesResponse] = await Promise.all([
+      const [dashRes, casesRes] = await Promise.allSettled([
         getDashboard(),
         getRecoveryCases(),
       ]);
 
-      const dashboard =
-        dashboardResponse?.data ??
-        dashboardResponse ??
-        {};
+      if (dashRes.status === "fulfilled" && dashRes.value) {
+        const dashboard =
+          dashRes.value?.data ??
+          dashRes.value ??
+          {};
 
-      const nextMetrics =
-        dashboard?.metrics ??
-        dashboard?.data ??
-        dashboard ??
-        {};
+        const nextMetrics =
+          dashboard?.metrics ??
+          dashboard?.data ??
+          dashboard ??
+          {};
 
-      const nextCases = Array.isArray(casesResponse)
-        ? casesResponse
-        : casesResponse?.cases ??
-          casesResponse?.data ??
-          [];
-
-      if (nextMetrics && typeof nextMetrics === "object") {
-        setMetrics((prev) => ({
-          ...prev,
-          ...nextMetrics,
-        }));
+        if (nextMetrics && typeof nextMetrics === "object") {
+          setMetrics((prev) => ({
+            ...prev,
+            ...nextMetrics,
+          }));
+        }
       }
 
-      if (Array.isArray(nextCases)) {
-        setCases(nextCases);
+      if (casesRes.status === "fulfilled" && casesRes.value) {
+        const nextCases = Array.isArray(casesRes.value)
+          ? casesRes.value
+          : casesRes.value?.cases ??
+            casesRes.value?.data ??
+            [];
+
+        if (Array.isArray(nextCases)) {
+          setCases(nextCases);
+        }
       }
     } catch (error) {
       console.warn("Live dashboard refresh failed:", error);
