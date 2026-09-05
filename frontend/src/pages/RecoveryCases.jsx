@@ -31,20 +31,22 @@ function money(value = 0) {
 function getStatus(item) {
     if (
         item?.guardrail?.requires_human_approval ||
-        item?.status === "human_approval"
+        item?.status === "human_approval" ||
+        (item?.guardrail && item?.guardrail?.passed === false)
     ) {
         return "human_approval";
     }
 
     if (
-        item?.verification?.recovered ||
-        item?.status === "recovered"
+        (item?.verification?.recovered || item?.status === "recovered") &&
+        (Number(item?.amount_recovered || 0) > 0 || item?.verification?.verified)
     ) {
         return "recovered";
     }
 
-    return item?.status || "pending";
+    return "pending";
 }
+
 
 
 function StatusIcon({ status }) {
@@ -183,9 +185,12 @@ export default function RecoveryCases() {
                 item?.case_id,
                 item?.transaction_id,
                 item?.customer,
+                item?.failure_reason,
+                item?.risk_level,
+                item?.status,
+                status,
                 item?.diagnosis?.diagnosis,
                 item?.decision?.action,
-                item?.status,
             ]
                 .filter(Boolean)
                 .join(" ")
@@ -212,7 +217,8 @@ export default function RecoveryCases() {
                     transactionId
                 );
 
-            setSelectedCase(result);
+            const updated = result?.case || result;
+            setSelectedCase(updated);
 
             await loadCases();
         } catch (err) {
@@ -497,9 +503,9 @@ export default function RecoveryCases() {
                                             fontSize: "9px",
                                         }}
                                     >
-                                        {item.diagnosis
-                                            ?.diagnosis ||
-                                            "Diagnosis unavailable"}
+                                        {item.is_virtual
+                                            ? "Awaiting recovery analysis"
+                                            : (item.diagnosis?.diagnosis || "Diagnosis unavailable")}
                                     </div>
 
                                     <div
@@ -509,14 +515,22 @@ export default function RecoveryCases() {
                                             fontSize: "7px",
                                         }}
                                     >
-                                        AI confidence{" "}
-                                        {Math.round(
-                                            Number(
-                                                item.diagnosis
-                                                    ?.confidence || 0
-                                            ) * 100
+                                        {item.is_virtual ? (
+                                            <span>
+                                                AI confidence — • {item.risk_level?.toUpperCase() || "LOW"} RISK
+                                            </span>
+                                        ) : (
+                                            <span>
+                                                AI confidence{" "}
+                                                {Math.round(
+                                                    Number(
+                                                        item.diagnosis
+                                                            ?.confidence || 0
+                                                    ) * 100
+                                                )}
+                                                %
+                                            </span>
                                         )}
-                                        %
                                     </div>
                                 </div>
 
@@ -538,6 +552,9 @@ export default function RecoveryCases() {
                                         }}
                                     >
                                         {item.transaction_id}
+                                        {item.failure_reason
+                                            ? ` • ${item.failure_reason.replace(/_/g, " ")}`
+                                            : ""}
                                     </div>
                                 </div>
 
@@ -546,7 +563,9 @@ export default function RecoveryCases() {
                                     variant={
                                         status === "recovered"
                                             ? "recovered"
-                                            : "human"
+                                            : status === "human_approval"
+                                            ? "warning"
+                                            : "default"
                                     }
                                     dot
                                 >
@@ -637,7 +656,7 @@ export default function RecoveryCases() {
                             >
                                 <div>
                                     <div className="section-label">
-                                        RECOVERY CASE
+                                        {selectedCase.is_virtual ? "QUEUED WORKLOAD" : "RECOVERY CASE"}
                                     </div>
 
                                     <h2
@@ -657,8 +676,9 @@ export default function RecoveryCases() {
                                             fontSize: "8px",
                                         }}
                                     >
-                                        {selectedCase.customer ||
-                                            "Unknown customer"}
+                                        {selectedCase.customer || "Unknown customer"} • {selectedCase.transaction_id}
+                                        {selectedCase.risk_level ? ` • ${selectedCase.risk_level.toUpperCase()} RISK` : ""}
+                                        {selectedCase.failure_reason ? ` • ${selectedCase.failure_reason.replace(/_/g, " ")}` : ""}
                                     </p>
                                 </div>
 
@@ -686,7 +706,7 @@ export default function RecoveryCases() {
                                     style={{
                                         display: "grid",
                                         gridTemplateColumns:
-                                            "repeat(3,1fr)",
+                                            "repeat(4,1fr)",
                                         gap: "12px",
                                     }}
                                 >
@@ -710,7 +730,7 @@ export default function RecoveryCases() {
 
                                     <div>
                                         <span className="section-label">
-                                            ACTION
+                                            ACTION / STRATEGY
                                         </span>
 
                                         <strong
@@ -720,9 +740,26 @@ export default function RecoveryCases() {
                                                 fontSize: "9px",
                                             }}
                                         >
-                                            {selectedCase.decision
-                                                ?.action ||
-                                                "—"}
+                                            {selectedCase.is_virtual
+                                                ? "Not processed"
+                                                : (selectedCase.decision?.action || "—")}
+                                        </strong>
+                                    </div>
+
+                                    <div>
+                                        <span className="section-label">
+                                            RECOVERED
+                                        </span>
+
+                                        <strong
+                                            style={{
+                                                display: "block",
+                                                marginTop: "7px",
+                                                fontSize: "11px",
+                                                color: (selectedCase.amount_recovered || 0) > 0 ? "var(--success)" : "#8e98a8",
+                                            }}
+                                        >
+                                            {money(selectedCase.amount_recovered || 0)}
                                         </strong>
                                     </div>
 
@@ -743,15 +780,22 @@ export default function RecoveryCases() {
                                                     ) ===
                                                         "recovered"
                                                         ? "recovered"
-                                                        : "human"
+                                                        : getStatus(
+                                                            selectedCase
+                                                        ) ===
+                                                            "human_approval"
+                                                        ? "warning"
+                                                        : "default"
                                                 }
                                             >
                                                 {getStatus(
                                                     selectedCase
-                                                ).replace(
-                                                    "_",
-                                                    " "
-                                                )}
+                                                ) ===
+                                                "human_approval"
+                                                    ? "HUMAN REVIEW"
+                                                    : getStatus(
+                                                        selectedCase
+                                                    ).toUpperCase()}
                                             </Badge>
                                         </div>
                                     </div>
@@ -777,7 +821,9 @@ export default function RecoveryCases() {
                                         fontSize: "13px",
                                     }}
                                 >
-                                    Autonomous recovery chain
+                                    {selectedCase.is_virtual
+                                        ? "Recovery pipeline stages"
+                                        : "Autonomous recovery chain"}
                                 </h3>
 
 
@@ -794,52 +840,54 @@ export default function RecoveryCases() {
                                         number="01"
                                         title="TRIGGER"
                                         description={
-                                            selectedCase
-                                                .trigger?.event ||
-                                            "failed"
+                                            selectedCase.is_virtual
+                                                ? (selectedCase.failure_reason?.replace(/_/g, " ") || "failed")
+                                                : (selectedCase.trigger?.event || "failed")
                                         }
                                         icon={Zap}
+                                        active={!selectedCase.is_virtual}
                                     />
 
                                     <PipelineStep
                                         number="02"
                                         title="DIAGNOSE"
                                         description={
-                                            selectedCase
-                                                .diagnosis
-                                                ?.diagnosis ||
-                                            "Unknown"
+                                            selectedCase.is_virtual
+                                                ? "Awaiting recovery analysis"
+                                                : (selectedCase.diagnosis?.diagnosis || "Unknown")
                                         }
                                         icon={Bot}
+                                        active={!selectedCase.is_virtual && Boolean(selectedCase.diagnosis)}
                                     />
 
                                     <PipelineStep
                                         number="03"
                                         title="DECIDE"
                                         description={
-                                            selectedCase
-                                                .decision
-                                                ?.action ||
-                                            "No action"
+                                            selectedCase.is_virtual
+                                                ? "Not processed"
+                                                : (selectedCase.decision?.action || "No action")
                                         }
                                         icon={Bot}
+                                        active={!selectedCase.is_virtual && Boolean(selectedCase.decision)}
                                     />
 
                                     <PipelineStep
                                         number="04"
                                         title="GUARDRAIL"
                                         description={
-                                            selectedCase
-                                                .guardrail
-                                                ?.passed
-                                                ? "Approved"
-                                                : "Human approval"
+                                            selectedCase.is_virtual
+                                                ? "Awaiting evaluation"
+                                                : (selectedCase.guardrail?.passed
+                                                    ? "Approved"
+                                                    : "Human approval")
                                         }
                                         icon={ShieldCheck}
+                                        active={!selectedCase.is_virtual && Boolean(selectedCase.guardrail)}
                                         danger={
-                                            !selectedCase
-                                                .guardrail
-                                                ?.passed
+                                            !selectedCase.is_virtual &&
+                                            Boolean(selectedCase.guardrail) &&
+                                            !selectedCase.guardrail?.passed
                                         }
                                     />
 
@@ -847,25 +895,26 @@ export default function RecoveryCases() {
                                         number="05"
                                         title="EXECUTE"
                                         description={
-                                            selectedCase
-                                                .execution
-                                                ?.status ||
-                                            "Pending"
+                                            selectedCase.is_virtual
+                                                ? "Pending"
+                                                : (selectedCase.execution?.status || "Pending")
                                         }
                                         icon={Zap}
+                                        active={!selectedCase.is_virtual && Boolean(selectedCase.execution)}
                                     />
 
                                     <PipelineStep
                                         number="06"
                                         title="VERIFY"
                                         description={
-                                            selectedCase
-                                                .verification
-                                                ?.verified
-                                                ? "Verified"
-                                                : "Pending"
+                                            selectedCase.is_virtual
+                                                ? "Pending"
+                                                : (selectedCase.verification?.verified
+                                                    ? "Verified"
+                                                    : "Pending")
                                         }
                                         icon={ShieldCheck}
+                                        active={!selectedCase.is_virtual && Boolean(selectedCase.verification?.verified)}
                                     />
 
                                 </div>
@@ -890,10 +939,9 @@ export default function RecoveryCases() {
                                         fontSize: "12px",
                                     }}
                                 >
-                                    {selectedCase
-                                        .diagnosis
-                                        ?.diagnosis ||
-                                        "Unavailable"}
+                                    {selectedCase.is_virtual
+                                        ? "Awaiting recovery analysis"
+                                        : (selectedCase.diagnosis?.diagnosis || "Unavailable")}
                                 </h3>
 
                                 <p
@@ -904,10 +952,9 @@ export default function RecoveryCases() {
                                         lineHeight: 1.7,
                                     }}
                                 >
-                                    {selectedCase
-                                        .diagnosis
-                                        ?.reasoning ||
-                                        "No reasoning recorded."}
+                                    {selectedCase.is_virtual
+                                        ? `Transaction failed with reason "${selectedCase.failure_reason || "unknown"}". Autonomous diagnosis will inspect telemetry once recovery is triggered.`
+                                        : (selectedCase.diagnosis?.reasoning || "No reasoning recorded.")}
                                 </p>
 
                                 <div
@@ -921,25 +968,25 @@ export default function RecoveryCases() {
                                         variant="ai"
                                     >
                                         AI CONFIDENCE{" "}
-                                        {Math.round(
-                                            Number(
-                                                selectedCase
-                                                    .diagnosis
-                                                    ?.confidence ||
-                                                0
-                                            ) * 100
-                                        )}
-                                        %
+                                        {selectedCase.is_virtual
+                                            ? "—"
+                                            : `${Math.round(
+                                                Number(
+                                                    selectedCase
+                                                        .diagnosis
+                                                        ?.confidence || 0
+                                                ) * 100
+                                            )}%`}
                                     </Badge>
 
                                     <Badge
                                         variant="neutral"
                                     >
-                                        {selectedCase
-                                            .diagnosis
-                                            ?.ai_generated
-                                            ? "AI GENERATED"
-                                            : "DETERMINISTIC FALLBACK"}
+                                        {selectedCase.is_virtual
+                                            ? "QUEUED FOR ANALYSIS"
+                                            : (selectedCase.diagnosis?.ai_generated
+                                                ? "AI GENERATED"
+                                                : "DETERMINISTIC FALLBACK")}
                                     </Badge>
                                 </div>
                             </GlassCard>
@@ -971,24 +1018,23 @@ export default function RecoveryCases() {
                                             fontSize: "11px",
                                         }}
                                     >
-                                        {selectedCase
-                                            .decision
-                                            ?.action ||
-                                            "no_action"}
+                                        {selectedCase.is_virtual
+                                            ? "Not processed"
+                                            : (selectedCase.decision?.action || "no_action")}
                                     </strong>
 
                                     <Badge
                                         variant="ai"
                                     >
-                                        {Math.round(
-                                            Number(
-                                                selectedCase
-                                                    .decision
-                                                    ?.confidence ||
-                                                0
-                                            ) * 100
-                                        )}
-                                        %
+                                        {selectedCase.is_virtual
+                                            ? "—"
+                                            : `${Math.round(
+                                                Number(
+                                                    selectedCase
+                                                        .decision
+                                                        ?.confidence || 0
+                                                ) * 100
+                                            )}%`}
                                     </Badge>
                                 </div>
 
@@ -1000,10 +1046,9 @@ export default function RecoveryCases() {
                                         lineHeight: 1.7,
                                     }}
                                 >
-                                    {selectedCase
-                                        .decision
-                                        ?.reason ||
-                                        "No decision reason recorded."}
+                                    {selectedCase.is_virtual
+                                        ? "No strategy chosen yet. Recovery action will trigger diagnosis, strategy selection, and guardrail validation."
+                                        : (selectedCase.decision?.reason || "No decision reason recorded.")}
                                 </p>
                             </GlassCard>
 
@@ -1028,9 +1073,12 @@ export default function RecoveryCases() {
                                         gap: "9px",
                                     }}
                                 >
-                                    {selectedCase
-                                        .guardrail
-                                        ?.passed ? (
+                                    {selectedCase.is_virtual ? (
+                                        <AlertTriangle
+                                            size={17}
+                                            color="#8e98a8"
+                                        />
+                                    ) : selectedCase.guardrail?.passed ? (
                                         <CheckCircle2
                                             size={17}
                                             color="var(--success)"
@@ -1047,11 +1095,11 @@ export default function RecoveryCases() {
                                             fontSize: "10px",
                                         }}
                                     >
-                                        {selectedCase
-                                            .guardrail
-                                            ?.passed
-                                            ? "AUTOMATION APPROVED"
-                                            : "HUMAN APPROVAL REQUIRED"}
+                                        {selectedCase.is_virtual
+                                            ? "GUARDRAIL CHECK PENDING"
+                                            : (selectedCase.guardrail?.passed
+                                                ? "AUTOMATION APPROVED"
+                                                : "HUMAN APPROVAL REQUIRED")}
                                     </strong>
                                 </div>
 
@@ -1063,10 +1111,9 @@ export default function RecoveryCases() {
                                         lineHeight: 1.7,
                                     }}
                                 >
-                                    {selectedCase
-                                        .guardrail
-                                        ?.reason ||
-                                        "No guardrail explanation recorded."}
+                                    {selectedCase.is_virtual
+                                        ? `Deterministic policy limits (₹10,000 threshold, customer risk level ${selectedCase.risk_level || "low"}) will evaluate upon execution.`
+                                        : (selectedCase.guardrail?.reason || "No guardrail explanation recorded.")}
                                 </p>
                             </GlassCard>
 
@@ -1143,28 +1190,28 @@ export default function RecoveryCases() {
 
                             {/* ACTION */}
 
-                            {selectedCase
-                                .guardrail
-                                ?.passed &&
-                                !selectedCase
-                                    .execution && (
-                                    <Button
-                                        style={{
-                                            width: "100%",
-                                            marginTop: "18px",
-                                        }}
-                                        disabled={executing}
-                                        onClick={() =>
-                                            executeRecovery(
-                                                selectedCase
-                                            )
-                                        }
-                                    >
-                                        {executing
-                                            ? "Executing recovery..."
-                                            : "Execute recovery"}
-                                    </Button>
-                                )}
+                            {(selectedCase.is_virtual ||
+                                (selectedCase.guardrail?.passed &&
+                                    !selectedCase.execution)) && (
+                                <Button
+                                    style={{
+                                        width: "100%",
+                                        marginTop: "18px",
+                                    }}
+                                    disabled={executing}
+                                    onClick={() =>
+                                        executeRecovery(
+                                            selectedCase
+                                        )
+                                    }
+                                >
+                                    {executing
+                                        ? "Executing recovery..."
+                                        : selectedCase.is_virtual
+                                        ? "Initiate Autonomous Recovery"
+                                        : "Execute recovery"}
+                                </Button>
+                            )}
 
                         </motion.aside>
                     </>

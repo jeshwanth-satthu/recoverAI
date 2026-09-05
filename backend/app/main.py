@@ -214,12 +214,60 @@ def get_mongodb_transactions():
 @app.get("/api/recovery-cases")
 def get_recovery_cases():
 
-    cases = get_all_recovery_cases()
+    persisted_cases = get_all_recovery_cases()
+    recoverable_txs = list(
+        transactions_collection.find(
+            {"recoverable": True},
+            {"_id": 0}
+        )
+    )
+
+    combined_cases = []
+    seen_tx_ids = set()
+
+    # 1. Persisted recovery cases take priority
+    for case in persisted_cases:
+        tx_id = case.get("transaction_id")
+        if tx_id and tx_id not in seen_tx_ids:
+            case_copy = dict(case)
+            case_copy["is_virtual"] = False
+            combined_cases.append(case_copy)
+            seen_tx_ids.add(tx_id)
+
+    # 2. Recoverable transactions without an existing recovery case
+    for tx in recoverable_txs:
+        tx_id = tx.get("id")
+        if tx_id and tx_id not in seen_tx_ids:
+            virtual_case = {
+                "case_id": f"PENDING-{tx_id}",
+                "transaction_id": tx_id,
+                "customer": tx.get("customer"),
+                "email": tx.get("email"),
+                "amount": tx.get("amount"),
+                "currency": tx.get("currency") or "INR",
+                "transaction_type": tx.get("type"),
+                "initial_status": tx.get("status"),
+                "failure_reason": tx.get("failure_reason"),
+                "risk_level": tx.get("risk_level"),
+                "retry_count": tx.get("retry_count", 0) if tx.get("retry_count") is not None else 0,
+                "status": "pending",
+                "diagnosis": None,
+                "decision": None,
+                "guardrail": None,
+                "execution": None,
+                "verification": None,
+                "ml_strategy": None,
+                "amount_recovered": 0,
+                "is_virtual": True,
+            }
+            combined_cases.append(virtual_case)
+            seen_tx_ids.add(tx_id)
 
     return serialize_mongo({
-        "count": len(cases),
-        "cases": cases
+        "count": len(combined_cases),
+        "cases": combined_cases
     })
+
 
 
 @app.get("/api/recovery-priority")
